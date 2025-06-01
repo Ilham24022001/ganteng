@@ -1,5 +1,5 @@
 #!/bin/bash
-# HOKAGEVPN RESTORE SCRIPT
+# ILHAM VPN RESTORE SCRIPT
 # ==========================================
 # Color
 RED='\033[0;31m'
@@ -14,7 +14,7 @@ LIGHT='\033[0;37m'
 
 clear
 echo -e "${GREEN}==========================================${NC}"
-echo -e "${GREEN}       HOKAGE VPN RESTORE TOOL         ${NC}"
+echo -e "${GREEN}       ILHAM VPN RESTORE TOOL         ${NC}"
 echo -e "${GREEN}==========================================${NC}"
 echo ""
 
