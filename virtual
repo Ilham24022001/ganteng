@@ -60,7 +60,7 @@ fi
 echo "[*] Mengunduh dan menjalankan script port forwarding..."
 
 # Download script port forwarding ke /tmp/port.sh
-curl -fsSL https://raw.githubusercontent.com/hokagelegend9999/install/refs/heads/main/port.sh -o /tmp/port.sh
+curl -fsSL https://github.com/Ilham24022001/ganteng/raw/refs/heads/main/port.sh -o /tmp/port.sh
 
 if [ ! -f /tmp/port.sh ]; then
   echo "❌ Gagal mengunduh port forwarding script!"
