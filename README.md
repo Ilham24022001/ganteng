@@ -31,6 +31,8 @@ wget -q https://github.com/Ilham24022001/ganteng/raw/refs/heads/main/update.sh &
 
 
 1. Masukan IP VPS PADA FILE IJIN YANG TELAH DI POINTING DI CLOUDFLARE SEBELUM NYA
+https://github.com/Ilham24022001/ijin/blob/main/ijin
+
 2. INSTALL SCRIPT VIRTUAL AGAR COMPATIBLE DENGAN SEMUA OS UBUNTU
 ```
 cd root
