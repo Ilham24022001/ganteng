@@ -23,17 +23,11 @@ function animate() {
     printf "    \b\b\b\b"
 }
 
-# Header with Hokage VPN banner
+# Header with Ilham Themode VPN banner
 function header() {
     clear
     echo -e "${PURPLE}"
-  echo -e "\033[1;31m"  # Red color
-    echo " ██╗  ██╗ ██████╗ ██╗  ██╗ █████╗  ██████╗ ███████╗"
-    echo " ██║  ██║██╔═══██╗██║  ██║██╔══██╗██╔════╝ ██╔════╝"
-    echo " ███████║██║   ██║███████║███████║██║  ███╗█████╗  "
-    echo " ██╔══██║██║   ██║██╔══██║██╔══██║██║   ██║██╔══╝  "
-    echo " ██║  ██║╚██████╔╝██║  ██║██║  ██║╚██████╔╝███████╗"
-    echo " ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝"
+    echo -e "\033[1;31m"  # Red color
     echo " ██╗   ██╗██████╗ ███╗   ██╗"
     echo " ██║   ██║██╔══██╗████╗  ██║"
     echo " ██║   ██║██████╔╝██╔██╗ ██║"
@@ -78,7 +72,7 @@ fi
 # Main installation
 function install_vpn() {
     header
-    echo -e "${GREEN}Starting Hokage VPN Installation...${NC}"
+    echo -e "${GREEN}Starting Ilham Themode VPN Installation...${NC}"
     echo ""
     
     # Install SSTP
@@ -96,7 +90,7 @@ function install_vpn() {
     echo -e "\n${GREEN}Directory ready for menu installation!${NC}"
     
     # Install VPN menu
-    echo -e "\n${YELLOW}[3/3] Installing Hokage VPN Menu (SSTP+PPTP+L2TP)...${NC}"
+    echo -e "\n${YELLOW}[3/3] Installing Ilham Themode VPN Menu (SSTP+PPTP+L2TP)...${NC}"
     (rm -f vpn && \
      wget https://raw.githubusercontent.com/hokagelegend9999/vpn/refs/heads/main/vpn -q && \
      sudo chmod +x vpn) > /dev/null 2>&1 &
@@ -108,7 +102,7 @@ function install_vpn() {
     
     # Completion message
     echo -e "\n${PURPLE}===================================${NC}"
-    echo -e "${GREEN}  Hokage VPN Installation Complete!  ${NC}"
+    echo -e "${GREEN}  Ilham Themode VPN Installation Complete!  ${NC}"
     echo -e "${PURPLE}===================================${NC}"
     echo ""
     echo -e "${BLUE}VPN Services Installed:${NC}"
