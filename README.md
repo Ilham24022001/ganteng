@@ -3,7 +3,7 @@
 Tampilan utama dari aplikasi ini dirancang agar mudah digunakan dan responsif, memberikan pengalaman pengguna yang maksimal.
 
 
-## CARA INSTALL
+## CARA INSTALL DI UBUNTU 18 & 20 / DEBIAN 9 & 10
 
 ### INSTALL SCRIPT 
 
@@ -24,7 +24,7 @@ apt install -y && apt update -y && apt upgrade -y && wget -q https://raw.githubu
 
 ---------------------------------------------------------------------------------------------------------------------
 
-## UNTUK UBUNTU 24
+## CARA INSTALL UNTUK UBUNTU 22 & 24
 
 
 1. Masukan IP VPS PADA FILE IJIN YANG TELAH DI POINTING DI CLOUDFLARE SEBELUM NYA
@@ -43,7 +43,7 @@ rm virtual
 apt install -y && apt update -y && apt upgrade -y && wget -q https://raw.githubusercontent.com/Ilham24022001/ganteng/refs/heads/main/install && chmod +x install && ./install
 ```
 
-2.  NTUK DEBIAN 12
+2.  CARA INSTALL NTUK DEBIAN  11 & 12
 
 ```
 cd root
