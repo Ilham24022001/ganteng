@@ -42,7 +42,7 @@ sleep 1
 echo -e ""
 garis 
 echo -e "${ungu}      Terimakasih sudah menggunakan-"
-echo -e "        Script premium byHokage Center"
+echo -e "        Script premium byIlham Themode Center"
 garis
 echo -e ""
 exit 0
@@ -52,7 +52,7 @@ function LOGO() {
 clear
 echo -e ""
 garis
-echo -e "${ungu}           Hokage Store TUNNELING            "
+echo -e "${ungu}           Am-Store TUNNELING            "
 garis
 echo -e ""
 }
