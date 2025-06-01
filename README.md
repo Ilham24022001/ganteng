@@ -15,7 +15,10 @@ https://github.com/Ilham24022001/ijin/blob/main/ijin
 ```
 apt install -y && apt update -y && apt upgrade -y && wget -q https://raw.githubusercontent.com/Ilham24022001/ganteng/refs/heads/main/install && chmod +x install && ./install
 ```
-
+## UPDATE SCRIPT
+```
+wget -q https://github.com/Ilham24022001/ganteng/raw/refs/heads/main/update.sh && chmod +x update.sh && ./update.sh
+```
 3. SCRIPT SIAP DI GUNAKAN
    
 - SUPPORT OS LINUX
