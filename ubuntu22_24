@@ -27,18 +27,37 @@ PORTS_TO_FORWARD=(
 
 echo "Memulai setup LXC container dan port forwarding..."
 
-# Cek apakah LXC sudah terinstal
-if ! command -v lxc &> /dev/null
-then
-    echo "LXC tidak ditemukan. Menginstal LXC..."
+# --- Cek dan Instal LXC jika belum ada ---
+LXC_INSTALLED=false
+if command -v lxc &> /dev/null && command -v lxc-create &> /dev/null; then
+    LXC_INSTALLED=true
+    echo "LXC sudah terinstal."
+else
+    echo "LXC tidak ditemukan. Menginstal LXC dan lxc-templates..."
     sudo apt update
     sudo apt install -y lxc lxc-templates
     if [ $? -ne 0 ]; then
         echo "Gagal menginstal LXC. Mohon periksa koneksi internet atau repository Anda."
         exit 1
     fi
-    echo "LXC terinstal. Mohon reboot sistem Anda dan jalankan script ini lagi jika ini adalah instalasi LXC pertama Anda."
-    exit 0
+    LXC_INSTALLED=true
+    echo "LXC berhasil diinstal."
+    echo "Penting: LXC seringkali memerlukan reboot sistem untuk menginisialisasi bridge jaringan dengan benar."
+    read -p "Apakah Anda ingin me-reboot sistem Anda sekarang? (y/n): " REBOOT_CHOICE
+    if [[ "$REBOOT_CHOICE" =~ ^[Yy]$ ]]; then
+        echo "Rebooting sekarang. Mohon jalankan kembali script ini setelah sistem menyala."
+        sudo reboot
+        exit 0 # Keluar setelah reboot
+    else
+        echo "Melanjutkan tanpa reboot. Jika Anda mengalami masalah jaringan, pertimbangkan untuk reboot secara manual."
+        sleep 5
+    fi
+fi
+
+# Pastikan LXC sudah benar-benar terinstal dan perintahnya ada
+if ! $LXC_INSTALLED; then
+    echo "LXC gagal diinstal atau tidak ditemukan. Tidak dapat melanjutkan."
+    exit 1
 fi
 
 # Cek apakah container sudah ada
@@ -92,7 +111,7 @@ sleep 10 # Beri waktu agar container boot sepenuhnya
 
 # Cek apakah container berjalan
 if ! lxc-ls -f "$CONTAINER_NAME" | grep -q "RUNNING"; then
-    echo "Gagal memulai container '$CONTAINER_NAME'. Periksa log LXC."
+    echo "Gagal memulai container '$CONTAINER_NAME'. Periksa log LXC di /var/log/lxc/${CONTAINER_NAME}.log."
     exit 1
 fi
 
@@ -103,14 +122,16 @@ echo "Menunggu container mendapatkan koneksi internet..."
 sudo lxc-attach -n "$CONTAINER_NAME" -- ping -c 3 google.com > /dev/null 2>&1
 if [ $? -ne 0 ]; then
     echo "Container tidak memiliki koneksi internet. Periksa konfigurasi jaringan host dan LXC Anda."
-    echo "Coba reboot host jika ini adalah instalasi LXC pertama atau setelah perubahan besar pada jaringan."
+    echo "Jika Anda tidak reboot setelah instalasi LXC, coba reboot host secara manual sekarang."
     exit 1
 fi
 
 echo "Mengupdate dan mengupgrade sistem di dalam container..."
 sudo lxc-attach -n "$CONTAINER_NAME" -- apt update && sudo lxc-attach -n "$CONTAINER_NAME" -- apt upgrade -y
 
-# --- Bagian 2: Konfigurasi IP Forwarding dan Port Forwarding (DNAT) di Host ---
+---
+
+### Konfigurasi IP Forwarding dan Port Forwarding (DNAT) di Host
 
 echo "Mengkonfigurasi IP Forwarding dan Port Forwarding di host Ubuntu 24.04..."
 
@@ -142,15 +163,19 @@ echo "Menambahkan aturan IPTables untuk port forwarding..."
 echo "Membersihkan aturan NAT yang mungkin duplikat..."
 # Loop melalui semua aturan DNAT yang mungkin sudah ada untuk container_ip dan hapus
 for rule in $(sudo iptables -t nat -S PREROUTING | grep "DNAT --to-destination ${CONTAINER_IP}"); do
-    sudo iptables -t nat -D $(echo $rule | sed 's/-A //')
+    sudo iptables -t nat -D $(echo "$rule" | sed 's/-A //')
 done
 
 # Hapus aturan FORWARD yang mungkin duplikat
 for rule in $(sudo iptables -S FORWARD | grep "${BRIDGE_NAME} -o ${HOST_INTERNET_INTERFACE}"); do
-    sudo iptables -D $(echo $rule | sed 's/-A //')
+    sudo iptables -D $(echo "$rule" | sed 's/-A //')
 done
 for rule in $(sudo iptables -S FORWARD | grep "${HOST_INTERNET_INTERFACE} -o ${BRIDGE_NAME}"); do
-    sudo iptables -D $(echo $rule | sed 's/-A //')
+    sudo iptables -D $(echo "$rule" | sed 's/-A //')
+done
+# Aturan GRE forward juga perlu dibersihkan secara spesifik
+for rule in $(sudo iptables -S FORWARD | grep "proto 47 -d ${CONTAINER_IP}"); do
+    sudo iptables -D $(echo "$rule" | sed 's/-A //')
 done
 
 # Izinkan forwarding dari bridge LXC ke internet
@@ -165,13 +190,13 @@ sudo iptables -t nat -A POSTROUTING -o "$HOST_INTERNET_INTERFACE" -j MASQUERADE
 # Aturan DNAT (Port Forwarding)
 for port_rule in "${PORTS_TO_FORWARD[@]}"; do
     IFS='/' read -r PORT_SPECS PROTOCOL <<< "$port_rule"
-    IFS=':' read -r HOST_PORT CONTAINER_PORT <<< "$PORT_SPECS"
 
     if [ "$PROTOCOL" == "proto_gre" ]; then
         echo "  - Meneruskan protokol GRE ke ${CONTAINER_IP}"
         sudo iptables -t nat -A PREROUTING -p gre -j DNAT --to-destination "${CONTAINER_IP}"
         sudo iptables -A FORWARD -p gre -d "${CONTAINER_IP}" -j ACCEPT
     else
+        IFS=':' read -r HOST_PORT CONTAINER_PORT <<< "$PORT_SPECS"
         echo "  - Meneruskan port ${HOST_PORT}/${PROTOCOL} ke ${CONTAINER_IP}:${CONTAINER_PORT}"
         sudo iptables -t nat -A PREROUTING -p "$PROTOCOL" --dport "$HOST_PORT" -j DNAT --to-destination "${CONTAINER_IP}:${CONTAINER_PORT}"
         sudo iptables -A FORWARD -p "$PROTOCOL" -d "${CONTAINER_IP}" --dport "$CONTAINER_PORT" -j ACCEPT
@@ -194,6 +219,7 @@ for port_rule in "${PORTS_TO_FORWARD[@]}"; do
     fi
 done
 
-echo "Sekarang Anda dapat menjalankan script X-Ray dan layanan lainnya di dalam container."
+echo "Anda sekarang dapat menjalankan script X-Ray dan layanan lainnya di dalam container."
 echo "Untuk masuk ke container: sudo lxc-attach -n ${CONTAINER_NAME}"
-echo "Pastikan juga tidak ada firewall lain (misalnya UFW) di host yang memblokir port-port ini."
+echo "Penting: Pastikan juga tidak ada firewall lain (misalnya UFW) di host Anda yang memblokir port-port ini."
+echo "Jika Anda menggunakan UFW, pastikan Anda menambahkan aturan 'ufw allow' untuk setiap port yang Anda forward."
