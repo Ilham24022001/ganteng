@@ -61,7 +61,19 @@ wget -q https://github.com/Ilham24022001/ganteng/raw/refs/heads/main/update.sh &
 - DEBIAN 10
 
 
-## CARA INSTALL
+----------------------------------------------------------------------------------------------
+==========================================================================================
+
+## CARA INSTALL UBUNTU 22 & 24 ====== DEBIAN 11 & 12
+
+1. INSTALL ENV
 
 ![Deskripsi Gambar](https://github.com/Ilham24022001/ganteng/blob/main/6190602510419478514.jpg?raw=true)
+
+
+
+2. KETIK MENU
+
+   ![Deskripsi Gambar](https://github.com/Ilham24022001/ganteng/blob/main/Screenshot%202025-06-02%20174824.png?raw=true)
+   
 
