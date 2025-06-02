@@ -61,5 +61,7 @@ wget -q https://github.com/Ilham24022001/ganteng/raw/refs/heads/main/update.sh &
 - DEBIAN 10
 
 
+## CARA INSTALL
 
+![Deskripsi Gambar](https://github.com/Ilham24022001/ganteng/blob/main/6190602510419478514.jpg?raw=true)
 
