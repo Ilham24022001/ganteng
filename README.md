@@ -3,9 +3,6 @@
 Tampilan utama dari aplikasi ini dirancang agar mudah digunakan dan responsif, memberikan pengalaman pengguna yang maksimal.
 
 
-
-
-
 ## CARA INSTALL DI UBUNTU 18 & 20 / DEBIAN 9 & 10
 
 ### INSTALL SCRIPT 
@@ -31,9 +28,4 @@ wget -q https://github.com/Ilham24022001/ganteng/raw/refs/heads/main/update.sh &
 
 ----------------------------------------------------------------------------------------------
 ==========================================================================================
-
-
-
-   ![Deskripsi Gambar](https://github.com/Ilham24022001/ganteng/blob/main/Screenshot%202025-06-02%20174824.png?raw=true)
-   
 
