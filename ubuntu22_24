@@ -1,144 +1,199 @@
 #!/bin/bash
 
-# Cek apakah sudah root
-if [ "$(id -u)" -ne 0 ]; then
-  echo "❌ Harap jalankan script ini sebagai root (sudo)"
-  exit 1
+# --- Variabel Konfigurasi ---
+CONTAINER_NAME="ubuntu20-vpn"
+BRIDGE_NAME="lxcbr0"          # Ganti jika Anda menggunakan bridge LXC yang berbeda
+CONTAINER_IP="10.0.3.100"     # Ganti IP ini jika diperlukan, pastikan tidak konflik dengan IP lain di bridge Anda
+NETMASK="24"
+GATEWAY="10.0.3.1"            # Gateway default untuk lxcbr0 (biasanya)
+
+# --- Port yang Akan Di-forward (Tambahkan/Hapus sesuai kebutuhan Anda) ---
+# Format: "port_host:port_container/protocol"
+# Contoh: "80:80/tcp", "443:443/tcp", "500:500/udp"
+PORTS_TO_FORWARD=(
+    "443:443/tcp"     # X-Ray, TLS
+    "80:80/tcp"       # HAProxy (SSH WebSocket HTTP)
+    "109:109/tcp"     # Dropbear
+    "143:143/tcp"     # Dropbear (opsional)
+    "500:500/udp"     # L2TP/IPsec (IKE)
+    "4500:4500/udp"   # L2TP/IPsec (NAT Traversal)
+    "1701:1701/udp"   # L2TP
+    "1723:1723/tcp"   # PPTP
+    "proto_gre"       # PPTP (protokol GRE)
+    "8080:8080/tcp"   # HAProxy Stats (opsional)
+)
+
+# --- Bagian 1: Instalasi LXC dan Pembuatan Container ---
+
+echo "Memulai setup LXC container dan port forwarding..."
+
+# Cek apakah LXC sudah terinstal
+if ! command -v lxc &> /dev/null
+then
+    echo "LXC tidak ditemukan. Menginstal LXC..."
+    sudo apt update
+    sudo apt install -y lxc lxc-templates
+    if [ $? -ne 0 ]; then
+        echo "Gagal menginstal LXC. Mohon periksa koneksi internet atau repository Anda."
+        exit 1
+    fi
+    echo "LXC terinstal. Mohon reboot sistem Anda dan jalankan script ini lagi jika ini adalah instalasi LXC pertama Anda."
+    exit 0
 fi
 
-# Fungsi untuk menangani error container
-handle_container_error() {
-  local container=$1
-  
-  echo "⏳ Mencoba memperbaiki container $container..."
-  
-  # Gunakan perintah lengkap dengan path
-  /snap/bin/lxc stop $container --force 2>/dev/null
-  /snap/bin/lxc delete $container --force 2>/dev/null
-  /snap/bin/lxc delete $container/* --force 2>/dev/null
-  /snap/bin/lxc image delete ubuntu/20.04 2>/dev/null
-  /snap/bin/lxc storage delete default --force 2>/dev/null
-  /snap/bin/lxc storage create default dir source=/var/lib/lxd/storage-pools/default
-  
-  echo "♻️ Membuat ulang container $container..."
-  /snap/bin/lxc launch ubuntu:20.04 $container
-}
-
-# ========== [1] PERBAIKI SNAP & INSTALL LXD ==========
-echo "[*] Memperbaiki lingkungan snap..."
-sudo snap remove lxd --purge
-sudo snap remove core20 --purge
-sudo snap remove snapd --purge
-
-echo "[*] Re-install snapd..."
-sudo apt update
-sudo apt install -y --reinstall snapd
-sudo systemctl enable --now snapd.socket
-sudo ln -s /var/lib/snapd/snap /snap
-
-echo "[*] Install LXD versi stabil..."
-sudo snap install lxd --stable
-
-# Pastikan PATH termasuk snap
-export PATH=$PATH:/snap/bin
-
-# ========== [2] INIT LXD ==========
-echo "[*] Inisialisasi LXD..."
-if ! /snap/bin/lxc storage list | grep -q default; then
-  cat <<EOF | /snap/bin/lxd init --preseed
-config:
-  core.https_address: '[::]:8443'
-  core.trust_password: "password"
-storage_pools:
-- name: default
-  driver: dir
-networks:
-- name: lxdbr0
-  type: bridge
-  config:
-    ipv4.address: auto
-    ipv6.address: none
-    ipv4.nat: "true"
-    ipv4.nat.order: "before"
-profiles:
-- name: default
-  devices:
-    root:
-      path: /
-      pool: default
-      type: disk
-    eth0:
-      name: eth0
-      network: lxdbr0
-      type: nic
-EOF
+# Cek apakah container sudah ada
+if lxc-ls -f | grep -q "$CONTAINER_NAME" && lxc-ls -f | grep -q "STOPPED\|$CONTAINER_NAME.*RUNNING"; then
+    echo "Container '$CONTAINER_NAME' sudah ada. Melewati pembuatan container."
 else
-  echo "ℹ️ Profile default sudah ada"
+    echo "Membuat container LXC '$CONTAINER_NAME' dengan Ubuntu 20.04 (Focal Fossa)..."
+    sudo lxc-create -t download -n "$CONTAINER_NAME" -- -d ubuntu -r focal -a amd64
+
+    if [ $? -ne 0 ]; then
+        echo "Gagal membuat container LXC. Periksa koneksi internet atau konfigurasi LXC Anda."
+        exit 1
+    fi
 fi
 
-# ========== [3] SETUP CONTAINER ==========
-CONTAINER="legacy-script-env"
+echo "Mengkonfigurasi jaringan untuk container '$CONTAINER_NAME'..."
+# Stop container jika sedang berjalan untuk mengedit konfigurasi
+sudo lxc-stop -n "$CONTAINER_NAME" > /dev/null 2>&1
 
-echo "[*] Membuat container Ubuntu 20.04 bernama '$CONTAINER'..."
-if ! /snap/bin/lxc launch ubuntu:20.04 "$CONTAINER"; then
-  echo "❌ Gagal membuat container, mencoba perbaikan..."
-  handle_container_error "$CONTAINER"
+# Tambahkan konfigurasi jaringan statis ke file konfigurasi container
+CONFIG_FILE="/var/lib/lxc/${CONTAINER_NAME}/config"
+
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "Error: File konfigurasi container tidak ditemukan: $CONFIG_FILE"
+    exit 1
 fi
 
-echo "[*] Menunggu container aktif..."
-sleep 30  # Beri waktu lebih lama
-
-if ! /snap/bin/lxc list "$CONTAINER" | grep -q RUNNING; then
-  echo "⚠️ Container tidak berjalan, mencoba memulai ulang..."
-  /snap/bin/lxc start "$CONTAINER"
-  sleep 20
+# Backup file config asli jika belum dibackup
+if [ ! -f "${CONFIG_FILE}.bak" ]; then
+    sudo cp "$CONFIG_FILE" "${CONFIG_FILE}.bak"
+    echo "File konfigurasi container asli dibackup ke ${CONFIG_FILE}.bak"
 fi
 
-if ! /snap/bin/lxc list "$CONTAINER" | grep -q RUNNING; then
-  echo "❌ Gagal menjalankan container. Log error:"
-  /snap/bin/lxc info "$CONTAINER" --show-log
-  exit 1
+# Pastikan konfigurasi jaringan ada dan tidak duplikat
+if ! grep -q "lxc.net.0.ipv4.address = ${CONTAINER_IP}/${NETMASK}" "$CONFIG_FILE"; then
+    sudo bash -c "cat <<EOF >> $CONFIG_FILE
+lxc.net.0.ipv4.address = ${CONTAINER_IP}/${NETMASK}
+lxc.net.0.ipv4.gateway = ${GATEWAY}
+lxc.net.0.link = ${BRIDGE_NAME}
+lxc.net.0.type = veth
+lxc.net.0.flags = up
+EOF"
+    echo "Konfigurasi IP statis ditambahkan untuk ${CONTAINER_IP}."
+else
+    echo "Konfigurasi IP statis sudah ada di file config container."
 fi
 
-# ========== [4] CONTAINER SETUP ==========
-echo "[*] Menyiapkan dependensi di dalam container..."
-/snap/bin/lxc exec "$CONTAINER" -- bash -c "
-  apt update -y && apt upgrade -y
-  apt install -y python2 gcc make curl wget unzip zip screen gnupg net-tools iproute2 iptables dropbear cron htop iftop rsyslog bzip2 gzip dos2unix nano vim mc git cmake libreadline-dev zlib1g-dev libssl-dev libsqlite3-dev libxml-parser-perl python3 python3-pip ruby jq bc
-" || echo "⚠️ Beberapa paket gagal diinstall, melanjutkan..."
+echo "Memulai container '$CONTAINER_NAME'..."
+sudo lxc-start -n "$CONTAINER_NAME" -d
+sleep 10 # Beri waktu agar container boot sepenuhnya
 
-# ========== [5] KONFIGURASI PORT FORWARDING ==========
-echo "[*] Mengatur port forwarding untuk semua port..."
-CONTAINER_IP=$(/snap/bin/lxc list "$CONTAINER" -c 4 --format=csv | awk '{print $1}')
+# Cek apakah container berjalan
+if ! lxc-ls -f "$CONTAINER_NAME" | grep -q "RUNNING"; then
+    echo "Gagal memulai container '$CONTAINER_NAME'. Periksa log LXC."
+    exit 1
+fi
 
-# Hapus semua aturan iptables yang ada
-iptables -t nat -F
-iptables -t filter -F
+echo "Container '$CONTAINER_NAME' sudah berjalan dengan IP: ${CONTAINER_IP}"
 
-# Aktifkan IP forwarding
-echo 1 > /proc/sys/net/ipv4/ip_forward
+echo "Menunggu container mendapatkan koneksi internet..."
+# Coba ping google dari dalam container untuk memastikan koneksi internet
+sudo lxc-attach -n "$CONTAINER_NAME" -- ping -c 3 google.com > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+    echo "Container tidak memiliki koneksi internet. Periksa konfigurasi jaringan host dan LXC Anda."
+    echo "Coba reboot host jika ini adalah instalasi LXC pertama atau setelah perubahan besar pada jaringan."
+    exit 1
+fi
 
-# Buat aturan untuk semua port (1-65535)
-for PORT in {1..65535}; do
-  iptables -t nat -A PREROUTING -p tcp --dport $PORT -j DNAT --to-destination $CONTAINER_IP:$PORT
-  iptables -t nat -A PREROUTING -p udp --dport $PORT -j DNAT --to-destination $CONTAINER_IP:$PORT
-  iptables -t nat -A POSTROUTING -p tcp -d $CONTAINER_IP --dport $PORT -j MASQUERADE
-  iptables -t nat -A POSTROUTING -p udp -d $CONTAINER_IP --dport $PORT -j MASQUERADE
+echo "Mengupdate dan mengupgrade sistem di dalam container..."
+sudo lxc-attach -n "$CONTAINER_NAME" -- apt update && sudo lxc-attach -n "$CONTAINER_NAME" -- apt upgrade -y
+
+# --- Bagian 2: Konfigurasi IP Forwarding dan Port Forwarding (DNAT) di Host ---
+
+echo "Mengkonfigurasi IP Forwarding dan Port Forwarding di host Ubuntu 24.04..."
+
+# Aktifkan IP Forwarding di Host
+echo "Mengaktifkan IP Forwarding di host..."
+if ! grep -q "net.ipv4.ip_forward=1" /etc/sysctl.conf; then
+    echo "net.ipv4.ip_forward=1" | sudo tee -a /etc/sysctl.conf
+else
+    sudo sed -i 's/^#net.ipv4.ip_forward=1/net.ipv4.ip_forward=1/' /etc/sysctl.conf
+fi
+sudo sysctl -p
+
+# Instal iptables-persistent untuk menyimpan aturan firewall
+echo "Menginstal iptables-persistent untuk menyimpan aturan firewall..."
+sudo apt install -y iptables-persistent
+
+# Temukan interface internet utama di host
+HOST_INTERNET_INTERFACE=$(ip route get 8.8.8.8 | awk '{print $5}' | head -n 1)
+if [ -z "$HOST_INTERNET_INTERFACE" ]; then
+    echo "Tidak dapat menemukan interface internet utama host. Mohon tentukan secara manual."
+    echo "Anda bisa mencari interface dengan 'ip a' atau 'ip route'."
+    exit 1
+fi
+echo "Interface internet host terdeteksi: $HOST_INTERNET_INTERFACE"
+
+echo "Menambahkan aturan IPTables untuk port forwarding..."
+
+# Hapus aturan NAT yang sudah ada untuk menghindari duplikasi
+echo "Membersihkan aturan NAT yang mungkin duplikat..."
+# Loop melalui semua aturan DNAT yang mungkin sudah ada untuk container_ip dan hapus
+for rule in $(sudo iptables -t nat -S PREROUTING | grep "DNAT --to-destination ${CONTAINER_IP}"); do
+    sudo iptables -t nat -D $(echo $rule | sed 's/-A //')
 done
 
-# Simpan aturan iptables
-apt install -y iptables-persistent
-netfilter-persistent save
+# Hapus aturan FORWARD yang mungkin duplikat
+for rule in $(sudo iptables -S FORWARD | grep "${BRIDGE_NAME} -o ${HOST_INTERNET_INTERFACE}"); do
+    sudo iptables -D $(echo $rule | sed 's/-A //')
+done
+for rule in $(sudo iptables -S FORWARD | grep "${HOST_INTERNET_INTERFACE} -o ${BRIDGE_NAME}"); do
+    sudo iptables -D $(echo $rule | sed 's/-A //')
+done
 
-echo "[*] Port forwarding untuk semua port (1-65535) TCP/UDP telah diaktifkan ke container IP: $CONTAINER_IP"
+# Izinkan forwarding dari bridge LXC ke internet
+echo "Menambahkan aturan FORWARD untuk lalu lintas LXC..."
+sudo iptables -A FORWARD -i "$BRIDGE_NAME" -o "$HOST_INTERNET_INTERFACE" -j ACCEPT
+sudo iptables -A FORWARD -i "$HOST_INTERNET_INTERFACE" -o "$BRIDGE_NAME" -m state --state RELATED,ESTABLISHED -j ACCEPT
 
-# ========== [6] FINALIZATION ==========
-echo ""
-echo "✅ INSTALASI BERHASIL!"
-echo "➡️ Ketik 'menu' untuk masuk ke container"
-echo "🔌 Semua port (1-65535) diforward ke container"
-echo ""
-echo "💡 Tips:"
-echo "1. Untuk akses root di container: /snap/bin/lxc exec $CONTAINER -- bash"
-echo "2. Cek status container: /snap/bin/lxc list"
-echo "3. Backup container: /snap/bin/lxc export $CONTAINER backup.tar.gz"
+# Aturan NAT untuk lalu lintas keluar dari container
+echo "Menambahkan aturan MASQUERADE untuk container..."
+sudo iptables -t nat -A POSTROUTING -o "$HOST_INTERNET_INTERFACE" -j MASQUERADE
+
+# Aturan DNAT (Port Forwarding)
+for port_rule in "${PORTS_TO_FORWARD[@]}"; do
+    IFS='/' read -r PORT_SPECS PROTOCOL <<< "$port_rule"
+    IFS=':' read -r HOST_PORT CONTAINER_PORT <<< "$PORT_SPECS"
+
+    if [ "$PROTOCOL" == "proto_gre" ]; then
+        echo "  - Meneruskan protokol GRE ke ${CONTAINER_IP}"
+        sudo iptables -t nat -A PREROUTING -p gre -j DNAT --to-destination "${CONTAINER_IP}"
+        sudo iptables -A FORWARD -p gre -d "${CONTAINER_IP}" -j ACCEPT
+    else
+        echo "  - Meneruskan port ${HOST_PORT}/${PROTOCOL} ke ${CONTAINER_IP}:${CONTAINER_PORT}"
+        sudo iptables -t nat -A PREROUTING -p "$PROTOCOL" --dport "$HOST_PORT" -j DNAT --to-destination "${CONTAINER_IP}:${CONTAINER_PORT}"
+        sudo iptables -A FORWARD -p "$PROTOCOL" -d "${CONTAINER_IP}" --dport "$CONTAINER_PORT" -j ACCEPT
+    fi
+done
+
+# Simpan aturan iptables agar tetap persisten setelah reboot
+echo "Menyimpan aturan IPTables..."
+sudo netfilter-persistent save
+
+echo "Setup LXC container dan port forwarding selesai!"
+echo "Container '$CONTAINER_NAME' berjalan dengan IP: ${CONTAINER_IP}"
+echo "Port-port berikut telah diforward dari host ke container:"
+for port_rule in "${PORTS_TO_FORWARD[@]}"; do
+    IFS='/' read -r PORT_SPECS PROTOCOL <<< "$port_rule"
+    if [ "$PROTOCOL" == "proto_gre" ]; then
+        echo "  - Protokol GRE"
+    else
+        echo "  - ${PORT_SPECS} (${PROTOCOL})"
+    fi
+done
+
+echo "Sekarang Anda dapat menjalankan script X-Ray dan layanan lainnya di dalam container."
+echo "Untuk masuk ke container: sudo lxc-attach -n ${CONTAINER_NAME}"
+echo "Pastikan juga tidak ada firewall lain (misalnya UFW) di host yang memblokir port-port ini."
