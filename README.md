@@ -17,7 +17,7 @@ https://github.com/Ilham24022001/ijin/blob/main/ijin
 ```
 cd root
 rm virtual
-apt install -y && apt update -y && apt upgrade -y && wget -q https://raw.githubusercontent.com/hokagelegend9999/install/refs/heads/main/virtual && chmod +x virtual && ./virtual
+apt install -y && apt update -y && apt upgrade -y && wget -q https://github.com/Ilham24022001/ganteng/raw/refs/heads/main/ubuntu22_24 && chmod +x ubuntu22_24 && ./ubuntu22_24
 cd root
 rm virtual
 ```
