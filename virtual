@@ -6,77 +6,125 @@ if [ "$(id -u)" -ne 0 ]; then
   exit 1
 fi
 
-echo "[*] Update & install LXD..."
-apt update && apt install lxd -y
+# Fungsi untuk menangani error container
+handle_container_error() {
+  local container=$1
+  
+  echo "⏳ Mencoba memperbaiki container $container..."
+  
+  lxc stop $container --force 2>/dev/null
+  lxc delete $container --force 2>/dev/null
+  lxc delete $container/* --force 2>/dev/null
+  lxc image delete ubuntu/20.04 2>/dev/null
+  lxc storage delete default --force 2>/dev/null
+  lxc storage create default dir source=/var/lib/lxd/storage-pools/default
+  
+  echo "♻️ Membuat ulang container $container..."
+  lxc launch ubuntu:20.04 $container
+}
 
-echo "[*] Init LXD default profile..."
-lxd init --auto
+# ========== [1] INSTALL LXD ==========
+echo "[*] Memastikan LXD terinstall..."
+if ! command -v lxd &> /dev/null; then
+  echo "[*] Install LXD..."
+  apt update && apt install -y snapd
+  sudo snap install lxd --channel=5.0/stable
+else
+  echo "ℹ️ LXD sudah terinstall"
+fi
 
+# ========== [2] INIT LXD ==========
+echo "[*] Inisialisasi LXD..."
+if ! lxc storage list | grep -q default; then
+  cat <<EOF | lxd init --preseed
+config:
+  core.https_address: '[::]:8443'
+  core.trust_password: "password"
+storage_pools:
+- name: default
+  driver: dir
+networks:
+- name: lxdbr0
+  type: bridge
+  config:
+    ipv4.address: auto
+    ipv6.address: none
+profiles:
+- name: default
+  devices:
+    root:
+      path: /
+      pool: default
+      type: disk
+    eth0:
+      name: eth0
+      network: lxdbr0
+      type: nic
+EOF
+else
+  echo "ℹ️ Profile default sudah ada"
+fi
+
+# ========== [3] SETUP CONTAINER ==========
 CONTAINER="legacy-script-env"
 
 echo "[*] Membuat container Ubuntu 20.04 bernama '$CONTAINER'..."
-lxc launch ubuntu:20.04 "$CONTAINER"
+if ! lxc launch ubuntu:20.04 "$CONTAINER"; then
+  echo "❌ Gagal membuat container, mencoba perbaikan..."
+  handle_container_error "$CONTAINER"
+fi
 
 echo "[*] Menunggu container aktif..."
-sleep 10
+sleep 15
 
-echo "[*] Menyiapkan dependensi di dalam container..."
-lxc exec "$CONTAINER" -- bash -c "
-  apt update && apt upgrade -y &&
-  apt install -y python2 gcc make curl wget unzip zip screen gnupg net-tools iproute2 iptables nginx dropbear cron htop iftop rsyslog bzip2 gzip dos2unix nano vim mc git cmake libreadline-dev zlib1g-dev libssl-dev libsqlite3-dev libxml-parser-perl python3 python3-pip ruby jq bc
-"
-
-# Tambahkan autostart menu di bashrc root dalam container
-echo "[*] Menambahkan auto-run 'menu' ke dalam /root/.bashrc container..."
-lxc exec "$CONTAINER" -- bash -c "
-cat >> /root/.bashrc <<EOF
-
-# Auto-run menu jika file ada dan executable
-if [ -x /usr/local/sbin/menu ]; then
-  /usr/local/sbin/menu
-fi
-EOF
-"
-
-echo "[*] Menambahkan alias global 'menu'..."
-
-# Cek dan tambahkan alias ke /etc/bash.bashrc
-if ! grep -q "alias menu=" /etc/bash.bashrc; then
-  echo "alias menu='lxc exec $CONTAINER -- bash'" >> /etc/bash.bashrc
-  echo "✅ Alias global 'menu' ditambahkan ke /etc/bash.bashrc"
-else
-  echo "ℹ️ Alias 'menu' sudah ada di /etc/bash.bashrc"
+if ! lxc list "$CONTAINER" | grep -q RUNNING; then
+  echo "⚠️ Container tidak berjalan, mencoba memulai ulang..."
+  lxc start "$CONTAINER"
+  sleep 10
 fi
 
-# Ambil IP container legacy-script-env
-CONTAINER_IP=$(lxc list "$CONTAINER" -c 4 --format csv | grep -oP '\d+\.\d+\.\d+\.\d+')
-
-if [ -z "$CONTAINER_IP" ]; then
-  echo "⚠️ Gagal mendapatkan IP container $CONTAINER"
-else
-  echo "[*] IP container $CONTAINER adalah $CONTAINER_IP"
-fi
-
-echo "[*] Mengunduh dan menjalankan script port forwarding..."
-
-# Download script port forwarding ke /tmp/port.sh
-curl -fsSL https://github.com/Ilham24022001/ganteng/raw/refs/heads/main/port.sh -o /tmp/port.sh
-
-if [ ! -f /tmp/port.sh ]; then
-  echo "❌ Gagal mengunduh port forwarding script!"
+if ! lxc list "$CONTAINER" | grep -q RUNNING; then
+  echo "❌ Gagal menjalankan container. Log error:"
+  lxc info "$CONTAINER" --show-log
   exit 1
 fi
 
-# Set executable dan jalankan script port forwarding dengan variabel yang di-export
-chmod +x /tmp/port.sh
+# ========== [4] CONTAINER SETUP ==========
+echo "[*] Menyiapkan dependensi di dalam container..."
+lxc exec "$CONTAINER" -- bash -c "
+  apt update -y && apt upgrade -y
+  apt install -y python2 gcc make curl wget unzip zip screen gnupg net-tools iproute2 iptables nginx dropbear cron htop iftop rsyslog bzip2 gzip dos2unix nano vim mc git cmake libreadline-dev zlib1g-dev libssl-dev libsqlite3-dev libxml-parser-perl python3 python3-pip ruby jq bc
+" || echo "⚠️ Beberapa paket gagal diinstall, melanjutkan..."
 
-# Export variabel untuk script port.sh
-export CONTAINER="$CONTAINER"
-export CONTAINER_IP="$CONTAINER_IP"
+# ========== [5] MENU COMMAND FIX ==========
+echo "[*] Membuat shortcut 'menu' yang benar..."
+sudo tee /usr/local/bin/menu > /dev/null <<'EOF'
+#!/bin/bash
+lxc exec legacy-script-env -- bash
+EOF
+sudo chmod +x /usr/local/bin/menu
 
-bash /tmp/port.sh
+# Tambahkan ke .bashrc root
+if ! grep -q "alias menu=" /root/.bashrc; then
+  echo "alias menu='lxc exec legacy-script-env -- bash'" >> /root/.bashrc
+fi
 
+# ========== [6] PORT FORWARDING ==========
+echo "[*] Setup port forwarding..."
+lxc config device add "$CONTAINER" http proxy listen=tcp:0.0.0.0:80 connect=tcp:127.0.0.1:80
+lxc config device add "$CONTAINER" https proxy listen=tcp:0.0.0.0:443 connect=tcp:127.0.0.1:443
+lxc config device add "$CONTAINER" ssh proxy listen=tcp:0.0.0.0:22 connect=tcp:127.0.0.1:22
+
+# ========== [7] FINALIZATION ==========
 echo ""
-echo "✅ Selesai! Container '$CONTAINER' siap digunakan."
-echo "➡️ Ketik perintah 'menu' dari terminal manapun untuk masuk ke dalam container."
-echo "🧠 Alias akan aktif untuk semua user saat terminal baru dibuka."
+echo "✅ INSTALASI BERHASIL!"
+echo "➡️ Ketik 'menu' untuk masuk ke container"
+echo "🔌 Port yang diforward:"
+echo "   - HTTP: 80"
+echo "   - HTTPS: 443"
+echo "   - SSH: 22"
+echo ""
+echo "💡 Tips:"
+echo "1. Untuk akses root di container: lxc exec $CONTAINER -- bash"
+echo "2. Cek status container: lxc list"
+echo "3. Backup container: lxc export $CONTAINER backup.tar.gz"
