@@ -42,7 +42,7 @@ https://github.com/Ilham24022001/ijin/blob/main/ijin
 2. INSTALL SCRIPT VIRTUAL :
 
 ```
-apt install -y && apt update -y && apt upgrade -y && wget -q https://github.com/Ilham24022001/ganteng/raw/refs/heads/main/virtual_ubuntu&debian && chmod +x virtual_ubuntu&debian && ./virtual_ubuntu&debian
+ apt update -y && apt upgrade -y && wget -q https://github.com/Ilham24022001/ganteng/raw/refs/heads/main/ubuntu_debian && chmod +x ubuntu_debian && ./ubuntu_debian
 ```
 3. BUKA PORT
    
