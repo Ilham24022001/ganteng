@@ -85,7 +85,4 @@ wget -q https://github.com/Ilham24022001/ganteng/raw/refs/heads/main/update.sh &
   <img src="https://github.com/Ilham24022001/ganteng/blob/main/6190602510419478514.jpg?raw=true" alt="Gambar dengan Bingkai" width="600" />
 </div>
 
-2. 
-<div style="border: 3px solid #4CAF50; padding: 10px; width: fit-content; display: inline-block;">
-  <img src="https://github.com/Ilham24022001/ganteng/blob/main/6190602510419478514.jpg?raw=true" alt="Gambar dengan Bingkai" width="600" />
-</div>
+
