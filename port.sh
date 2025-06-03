@@ -1,52 +1,28 @@
 #!/bin/bash
 
-CONTAINER="legacy-script-env"
-CONTAINER_IP="10.104.225.79"
+CONTAINER_NAME="vpn-container"
 
-# Fungsi menambahkan forwarding port
-add_forward() {
-    NAME=$1
-    HOST_PORT=$2
-    CONTAINER_PORT=$3
-    PROTOCOL=${4:-tcp}
+echo "📦 Menambahkan port forwarding ke container: $CONTAINER_NAME"
 
-    echo "Menambahkan port forward: $NAME ($PROTOCOL $HOST_PORT → $CONTAINER_IP:$CONTAINER_PORT)"
-    lxc config device add "$CONTAINER" "$NAME" proxy \
-        listen=$PROTOCOL:0.0.0.0:$HOST_PORT \
-        connect=$PROTOCOL:$CONTAINER_IP:$CONTAINER_PORT \
-        bind=host || echo "⚠️  $NAME sudah ada, dilewati."
-}
+# === XRAY ===
+lxc config device add $CONTAINER_NAME xray443 proxy listen=tcp:0.0.0.0:443 connect=tcp:127.0.0.1:443
+lxc config device add $CONTAINER_NAME xray80 proxy listen=tcp:0.0.0.0:80 connect=tcp:127.0.0.1:80
+lxc config device add $CONTAINER_NAME xray10000 proxy listen=tcp:0.0.0.0:10000 connect=tcp:127.0.0.1:10000
 
-echo "=== Menambahkan semua port forwarding ke container: $CONTAINER ==="
+# === SSH WebSocket ===
+lxc config device add $CONTAINER_NAME sshws8880 proxy listen=tcp:0.0.0.0:8880 connect=tcp:127.0.0.1:8880
+lxc config device add $CONTAINER_NAME sshws2082 proxy listen=tcp:0.0.0.0:2082 connect=tcp:127.0.0.1:2082
+lxc config device add $CONTAINER_NAME sshws8080 proxy listen=tcp:0.0.0.0:8080 connect=tcp:127.0.0.1:8080
 
-# Web Ports
-add_forward "http" 80 80
-add_forward "https" 443 443
+# === Dropbear ===
+lxc config device add $CONTAINER_NAME dropbear22 proxy listen=tcp:0.0.0.0:149 connect=tcp:127.0.0.1:149
+lxc config device add $CONTAINER_NAME dropbear109 proxy listen=tcp:0.0.0.0:109 connect=tcp:127.0.0.1:109
+lxc config device add $CONTAINER_NAME dropbear143 proxy listen=tcp:0.0.0.0:143 connect=tcp:127.0.0.1:143
+lxc config device add $CONTAINER_NAME dropbear442 proxy listen=tcp:0.0.0.0:442 connect=tcp:127.0.0.1:442
 
-# SSH & SSH over WebSocket
-add_forward "sshws2082" 2082 2082
-add_forward "sshws2086" 2086 2086
+# === HAProxy ===
+lxc config device add $CONTAINER_NAME haproxy8443 proxy listen=tcp:0.0.0.0:8443 connect=tcp:127.0.0.1:8443
+lxc config device add $CONTAINER_NAME haproxy8080 proxy listen=tcp:0.0.0.0:8080 connect=tcp:127.0.0.1:8080
+lxc config device add $CONTAINER_NAME haproxy3000 proxy listen=tcp:0.0.0.0:3000 connect=tcp:127.0.0.1:3000
 
-# Xray / VMess / VLESS / Trojan (contoh port populer)
-add_forward "xrayv443" 444 443
-add_forward "xrayv8443" 8443 8443
-add_forward "xrayv8080" 8080 8080
-add_forward "xrayv8880" 8880 80
-
-# Dropbear SSH (umumnya 44 / 143)
-add_forward "dropbear44" 44 44
-add_forward "dropbear143" 143 143
-
-# HAProxy
-add_forward "haproxy8081" 8081 8081
-
-# VPN Ports
-add_forward "sstp" 4443 443
-add_forward "pptp" 1723 1723
-add_forward "l2tp" 1701 1701 udp
-
-# Tambahan umum lainnya
-add_forward "openvpn1194" 1194 1194 udp
-add_forward "squid3128" 3128 3128
-
-echo "✅ Semua port forwarding selesai ditambahkan!"
+echo "✅ Semua port forwarding berhasil ditambahkan."
