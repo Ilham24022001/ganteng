@@ -20,7 +20,6 @@ fi
 
 echo "📦 Menambahkan port forwarding ke container: $CONTAINER_NAME dengan IP: $CONTAINER_IP"
 
-# Fungsi tambah proxy device dengan cek jika sudah ada akan dihapus dulu supaya tidak error duplicate
 add_proxy_device() {
   local container=$1
   local name=$2
@@ -28,13 +27,11 @@ add_proxy_device() {
   local connect_ip=$4
   local connect_port=$5
 
-  # Jika device sudah ada, hapus dulu
   if lxc config device show "$container" | grep -qw "$name"; then
     echo "⚠️ Device $name sudah ada, menghapus terlebih dahulu..."
     lxc config device remove "$container" "$name"
   fi
 
-  # Tambah device baru
   lxc config device add "$container" "$name" proxy listen=tcp:0.0.0.0:"$listen_port" connect=tcp:"$connect_ip":"$connect_port"
   echo "✅ Device $name ditambahkan: listen=0.0.0.0:$listen_port -> connect=$connect_ip:$connect_port"
 }
