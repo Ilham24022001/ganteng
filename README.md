@@ -49,7 +49,10 @@ https://github.com/Ilham24022001/ijin/blob/main/ijin
  ```
  wget -q https://github.com/Ilham24022001/ganteng/raw/refs/heads/main/port.sh && chmod +x port.sh && ./port.sh
 ```
-
+- KETIK
+  ```
+  lxc exec ubuntu20 -- bash
+  ```
 4. INSTALL SCRIPT GANTENG PADA VPS YANG TELAH DI DAFTARKAN BERIKUT LINK INSTALL NYA :
 
 ```
@@ -59,7 +62,8 @@ apt install -y && apt update -y && apt upgrade -y && wget -q https://raw.githubu
 ```
 wget -q https://github.com/Ilham24022001/ganteng/raw/refs/heads/main/update.sh && chmod +x update.sh && ./update.sh
 ```
-5. SCRIPT SIAP DI GUNAKAN
+5. REBOOT 
+6. SCRIPT SIAP DI GUNAKAN
    
 - SUPPORT OS LINUX
 - UBUNTU 22 & 24
