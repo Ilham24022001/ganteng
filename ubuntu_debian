@@ -81,24 +81,37 @@ echo "🚀 Membuat container Ubuntu 20.04... Proses Sinkronisasi bisa agak lama,
 lxc launch ubuntu:20.04 ubuntu20
 lxc exec ubuntu20 -- apt update && lxc exec ubuntu20 -- apt upgrade -y
 
-# --- [9] BUAT SHORTCUT MENU ---
-echo "📁 Membuat shortcut 'menu' untuk akses cepat ke container..."
-cat <<EOF | sudo tee /usr/local/bin/menu > /dev/null
+echo "📁 Membuat shortcut 'lxc-menu' untuk akses container..."
+cat <<EOF | sudo tee /usr/local/bin/lxc-menu > /dev/null
 #!/bin/bash
-lxc exec ubuntu20 -- bash
+# Pastikan tidak ada rekursi
+if [ -z "\$LXC_MENU_RUNNING" ]; then
+    export LXC_MENU_RUNNING=1
+    lxc exec ubuntu20 -- /bin/bash -c 'cd; exec bash'
+else
+    echo "Error: Recursion detected!"
+fi
 EOF
-sudo chmod +x /usr/local/bin/menu
-echo "✅ Shortcut 'menu' siap digunakan!"
+sudo chmod +x /usr/local/bin/lxc-menu
 
-# --- [10] AKHIR ---
+# Buat alias 'menu' di .bashrc
+echo "alias menu='lxc-menu'" >> ~/.bashrc
+source ~/.bashrc
+
+# --- [10] VERIFIKASI FINAL ---
+echo "🔍 Verifikasi akhir..."
+lxc list
+
 cat <<EOF
 
-✅ INSTALASI BERHASIL!
+✅ INSTALASI BERHASIL DENGAN PERBAIKAN!
 
-Gunakan perintah berikut:
+Gunakan perintah baru:
 - Akses container: menu
 - Cek status: lxc list
 - Stop container: lxc stop ubuntu20
 
-Disarankan logout atau reboot untuk efek grup 'lxd' berlaku sepenuhnya.
+Rekomendasi:
+1. Lakukan reboot: sudo reboot
+2. Setelah reboot, coba jalankan: menu
 EOF
