@@ -2,6 +2,14 @@
 
 CONTAINER_NAME="vpn-container"
 
+# Cek apakah container ada
+if ! lxc list --format csv -c n | grep -wq "$CONTAINER_NAME"; then
+  echo "❌ Container '$CONTAINER_NAME' tidak ditemukan di project saat ini: $(lxc project show-default | grep '^name:' | awk '{print $2}')"
+  echo "📋 Daftar container yang tersedia:"
+  lxc list --format table
+  exit 1
+fi
+
 echo "📦 Menambahkan port forwarding ke container: $CONTAINER_NAME"
 
 # === XRAY ===
@@ -25,4 +33,4 @@ lxc config device add $CONTAINER_NAME haproxy8443 proxy listen=tcp:0.0.0.0:8443 
 lxc config device add $CONTAINER_NAME haproxy8080 proxy listen=tcp:0.0.0.0:8080 connect=tcp:127.0.0.1:8080
 lxc config device add $CONTAINER_NAME haproxy3000 proxy listen=tcp:0.0.0.0:3000 connect=tcp:127.0.0.1:3000
 
-echo "✅ Semua port forwarding berhasil ditambahkan."
+echo "✅ Semua port forwarding berhasil ditambahkan ke container '$CONTAINER_NAME'."
