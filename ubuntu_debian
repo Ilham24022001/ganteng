@@ -77,16 +77,28 @@ sudo lxc info
 lxc list
 
 # --- [8] BUAT CONTAINER ---
-echo "🚀 Membuat container Ubuntu 20.04...Proses Singkron ubuntu 20,22&24 agak lama bro...sabar"
+echo "🚀 Membuat container Ubuntu 20.04... Proses Sinkronisasi bisa agak lama, mohon sabar."
 lxc launch ubuntu:20.04 ubuntu20
 lxc exec ubuntu20 -- apt update && lxc exec ubuntu20 -- apt upgrade -y
 
+# --- [9] BUAT SHORTCUT MENU ---
+echo "📁 Membuat shortcut 'menu' untuk akses cepat ke container..."
+cat <<EOF | sudo tee /usr/local/bin/menu > /dev/null
+#!/bin/bash
+lxc exec ubuntu20 -- bash
+EOF
+sudo chmod +x /usr/local/bin/menu
+echo "✅ Shortcut 'menu' siap digunakan!"
+
+# --- [10] AKHIR ---
 cat <<EOF
 
 ✅ INSTALASI BERHASIL!
 
 Gunakan perintah berikut:
-- Akses container: lxc exec ubuntu20 -- bash
+- Akses container: menu
 - Cek status: lxc list
 - Stop container: lxc stop ubuntu20
+
+Disarankan logout atau reboot untuk efek grup 'lxd' berlaku sepenuhnya.
 EOF
