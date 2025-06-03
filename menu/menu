@@ -161,7 +161,7 @@ a=" ${CYAN}ACCOUNT PREMIUM"
 #clear
 echo -e " "
 echo -e " ${z}╭══════════════════════════════════════════════════════════╮${NC}"
-echo -e " ${z}│$NC${f}    WELCOME TO  AM GANTENG STORE AUTOSCRIPT PREMIUM      $NC${z}│$NC"
+echo -e " ${z}│$NC${f}    WELCOME TO  AM GANTENG VPS AUTOSCRIPT PREMIUM      $NC${z}│$NC"
 echo -e " ${z}╰══════════════════════════════════════════════════════════╯${NC}"
 echo -e " ${z}══════════════════════════════════════════════════════════${NC}"
 echo -e "${RED}● ${ORANGE}● ${YELLOW}● ${GREEN}● ${LIGHTGREEN}● ${CYAN}● ${LIGHTBLUE}● ${BLUE}● ${PURPLE}● ALL OS SUPPORT UBUNTU ${RED}● ${ORANGE}● ${YELLOW}●${PINK}● ${WHITE}● ${NC}${RED}● ${ORANGE}● ${YELLOW}● ${GREEN}● ${LIGHTGREEN}● ${CYAN}● ${LIGHTBLUE}● ${BLUE}● ${PURPLE}● ${PINK}● ${WHITE}● ${NC}${RED}● ${ORANGE}● ${YELLOW}● ${GREEN}● ${LIGHTGREEN}● ${CYAN}● ${LIGHTBLUE}● ${BLUE}● ${NC}"
