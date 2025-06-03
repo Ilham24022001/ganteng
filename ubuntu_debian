@@ -77,7 +77,7 @@ sudo lxc info
 lxc list
 
 # --- [8] BUAT CONTAINER ---
-echo "🚀 Membuat container Ubuntu 20.04..."
+echo "🚀 Membuat container Ubuntu 20.04...Proses Singkron ubuntu 20,22&24 agak lama bro...sabar"
 lxc launch ubuntu:20.04 ubuntu20
 lxc exec ubuntu20 -- apt update && lxc exec ubuntu20 -- apt upgrade -y
 
