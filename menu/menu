@@ -164,7 +164,7 @@ echo -e " ${z}╭═════════════════════
 echo -e " ${z}│$NC${f}    WELCOME TO  AM GANTENG STORE AUTOSCRIPT PREMIUM      $NC${z}│$NC"
 echo -e " ${z}╰══════════════════════════════════════════════════════════╯${NC}"
 echo -e " ${z}══════════════════════════════════════════════════════════${NC}"
-echo -e " ${z}$NC$r ⇲ $NC$y System OS ${NC}     $Blue=$NC $MODEL${NC}"
+echo -e "${RED}● ${ORANGE}● ${YELLOW}● ${GREEN}● ${LIGHTGREEN}● ${CYAN}● ${LIGHTBLUE}● ${BLUE}● ${PURPLE}● ALL OS SUPPORT UBUNTU ${PINK}● ${WHITE}● ${NC}${RED}● ${ORANGE}● ${YELLOW}● ${GREEN}● ${LIGHTGREEN}● ${CYAN}● ${LIGHTBLUE}● ${BLUE}● ${PURPLE}● ${PINK}● ${WHITE}● ${NC}${RED}● ${ORANGE}● ${YELLOW}● ${GREEN}● ${LIGHTGREEN}● ${CYAN}● ${LIGHTBLUE}● ${BLUE}● ${NC}"
 echo -e " ${z}$NC$r ⇲ $NC$y ISP ${NC}           $Blue=$NC $ISP${NC}"
 echo -e " ${z}$NC$r ⇲ $NC$y CITY ${NC}          $Blue=$NC $CITY${NC}"
 echo -e " ${z}$NC$r ⇲ $NC$y Server RAM ${NC}    $Blue=$NC $tram MB $NC"
