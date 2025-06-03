@@ -4,7 +4,7 @@ CONTAINER_NAME="vpn-container"
 
 # Cek apakah container ada
 if ! lxc list --format csv -c n | grep -wq "$CONTAINER_NAME"; then
-  echo "❌ Container '$CONTAINER_NAME' tidak ditemukan di project saat ini: $(lxc project show-default | grep '^name:' | awk '{print $2}')"
+  echo "❌ Container '$CONTAINER_NAME' tidak ditemukan di project saat ini."
   echo "📋 Daftar container yang tersedia:"
   lxc list --format table
   exit 1
