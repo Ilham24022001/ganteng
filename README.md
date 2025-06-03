@@ -62,8 +62,15 @@ apt install -y && apt update -y && apt upgrade -y && wget -q https://raw.githubu
 ```
 wget -q https://github.com/Ilham24022001/ganteng/raw/refs/heads/main/update.sh && chmod +x update.sh && ./update.sh
 ```
-5. REBOOT 
-6. SCRIPT SIAP DI GUNAKAN
+5. REBOOT
+6. KETIKAN
+   ```
+   lxc exec ubuntu20 -- bash
+   ```
+7. Lalu Ketikan " menu "
+   UNTUK MEMBUKA KE FILE SCRIPT SSH-XRAY-HAPROXY-VPN
+   
+9. SCRIPT SIAP DI GUNAKAN
    
 - SUPPORT OS LINUX
 - UBUNTU 22 & 24
