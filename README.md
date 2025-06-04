@@ -42,12 +42,20 @@ https://github.com/Ilham24022001/ijin/blob/main/ijin
 2. INSTALL SCRIPT VIRTUAL :
 
 ```
+cd
+rm ubuntu_debian
  apt update -y && apt upgrade -y && wget -q https://github.com/Ilham24022001/ganteng/raw/refs/heads/main/ubuntu_debian && chmod +x ubuntu_debian && ./ubuntu_debian
+cd
+rm ubuntu_debian
 ```
 3. BUKA PORT
    
  ```
+cd
+rm port.sh
  wget -q https://github.com/Ilham24022001/ganteng/raw/refs/heads/main/port.sh && chmod +x port.sh && ./port.sh
+cd
+rm port.sh
 ```
 - KETIK
   ```
