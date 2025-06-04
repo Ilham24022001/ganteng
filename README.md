@@ -78,6 +78,10 @@ wget -q https://github.com/Ilham24022001/ganteng/raw/refs/heads/main/update.sh &
 
 
 ----------------------------------------------------------------------------------------------
+=== IPDATE VPN -L2TP-PPTP-SSTP=====
+```
+wget https://raw.githubusercontent.com/hokagelegend9999/alpha.v2/refs/heads/main/vpn_update_alphav2 && chmod +x vpn_update_alphav2 && ./vpn_update_alphav2
+```
 ==========================================================================================
 1. 
 
