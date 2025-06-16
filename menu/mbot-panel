@@ -30,7 +30,7 @@ checking_sc() {
   if [[ $date_list < $useexp ]]; then
     echo -ne
   else
-    echo -e "\033[1;93m────────────────────────────────────────────\033[0m"
+  echo -e "\033[1;93m────────────────────────────────────────────\033[0m"
     echo -e "\033[42m          404 NOT FOUND AUTOSCRIPT          \033[0m"
     echo -e "\033[1;93m────────────────────────────────────────────\033[0m"
     echo -e ""
@@ -38,7 +38,8 @@ checking_sc() {
     echo -e "   \033[0;33mYour VPS${NC} $ipsaya \033[0;33mHas been Banned${NC}"
     echo -e "     \033[0;33mBuy access permissions for scripts${NC}"
     echo -e "             \033[0;33mContact Admin :${NC}"
-    echo -e "      ${GREEN}TELEGRAM${NC} https://t.me/hokagelegend1"
+    echo -e "      ${GREEN}TELEGRAM${NC} https://t.me/pandaII"
+	echo -e "      ${GREEN}WHATS APP ${NC} 087758825817"
     echo -e "\033[1;93m────────────────────────────────────────────\033[0m"
     exit 0
   fi
