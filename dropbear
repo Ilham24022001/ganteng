@@ -1,0 +1,91 @@
+#!/bin/bash
+# Dropbear Auto-Installer for Ubuntu 24.04
+# Complete Version v1.2
+
+# Check root
+if [ "$(id -u)" != "0" ]; then
+   echo -e "\e[31m✗ Error: Script harus dijalankan sebagai root\e[0m" 
+   exit 1
+fi
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+NC='\033[0m'
+
+# Config
+DROPBEAR_PORT=4747
+DROPBEAR_KEY_SIZE=2048
+
+function install_dropbear() {
+    echo -e "${YELLOW}▶ Memulai instalasi Dropbear...${NC}"
+    
+    # Install package
+    apt-get update > /dev/null 2>&1
+    apt-get install -y dropbear > /dev/null 2>&1
+    
+    # Clean existing config
+    rm -rf /etc/dropbear/
+    mkdir -p /etc/dropbear
+    
+    # Generate keys
+    echo -e "${YELLOW}▶ Membuat kunci RSA...${NC}"
+    dropbearkey -t rsa -f /etc/dropbear/dropbear_rsa_host_key -s $DROPBEAR_KEY_SIZE > /dev/null 2>&1
+    chmod 600 /etc/dropbear/*
+    
+    # Create config file
+    cat > /etc/default/dropbear <<EOF
+NO_START=0
+DROPBEAR_PORT=$DROPBEAR_PORT
+DROPBEAR_EXTRA_ARGS="-F -E -p $DROPBEAR_PORT -r /etc/dropbear/dropbear_rsa_host_key"
+EOF
+
+    # Create systemd service
+    cat > /etc/systemd/system/dropbear.service <<EOF
+[Unit]
+Description=Lightweight SSH Server (Dropbear)
+After=network.target
+
+[Service]
+ExecStart=/usr/sbin/dropbear -F -E -p $DROPBEAR_PORT -r /etc/dropbear/dropbear_rsa_host_key
+Restart=always
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    # Reload and enable
+    systemctl daemon-reload > /dev/null 2>&1
+    systemctl enable dropbear > /dev/null 2>&1
+    systemctl start dropbear
+    
+    # Firewall
+    if command -v ufw > /dev/null; then
+        ufw allow $DROPBEAR_PORT/tcp > /dev/null 2>&1
+    fi
+    
+    echo -e "${GREEN}✓ Dropbear berhasil diinstall${NC}"
+}
+
+function show_status() {
+    echo -e "\n${YELLOW}=== STATUS INSTALASI ===${NC}"
+    systemctl status dropbear --no-pager
+    
+    echo -e "\n${YELLOW}=== PORT YANG DIGUNAKAN ===${NC}"
+    netstat -tulnp | grep dropbear
+    
+    echo -e "\n${YELLOW}=== INFORMASI KONEKSI ===${NC}"
+    IP=$(curl -4 icanhazip.com 2>/dev/null || hostname -I | awk '{print $1}')
+    echo -e "Gunakan perintah ini untuk terhubung:"
+    echo -e "ssh -p $DROPBEAR_PORT username@${IP}"
+    
+    echo -e "\n${GREEN}✓ Instalasi selesai. Dropbear berjalan di port $DROPBEAR_PORT${NC}"
+}
+
+# Main execution
+clear
+echo -e "${GREEN}=== DROPBEAR INSTALLER UBUNTU 24.04 ===${NC}"
+install_dropbear
+show_status
