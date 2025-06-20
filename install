@@ -726,9 +726,9 @@ print_success "Swap 1 G"
 function ins_Fail2ban(){
 clear
 print_install "Menginstall Fail2ban"
-#apt -y install fail2ban > /dev/null 2>&1
-#sudo systemctl enable --now fail2ban
-#/etc/init.d/fail2ban restart
+apt -y install fail2ban > /dev/null 2>&1
+sudo systemctl enable --now fail2ban
+/etc/init.d/fail2ban restart
 #/etc/init.d/fail2ban status
 
 # Instal DDOS Flate
@@ -767,6 +767,7 @@ wget -q -O /usr/local/share/xray/geosite.dat "https://github.com/Loyalsoldier/v2
 wget -q -O /usr/local/share/xray/geoip.dat "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat" >/dev/null 2>&1
 wget -O /usr/sbin/ftvpn "${REPO}files/ftvpn" >/dev/null 2>&1
 chmod +x /usr/sbin/ftvpn
+apt install netfilter-persistent -y
 iptables -A FORWARD -m string --string "get_peers" --algo bm -j DROP
 iptables -A FORWARD -m string --string "announce_peer" --algo bm -j DROP
 iptables -A FORWARD -m string --string "find_node" --algo bm -j DROP
