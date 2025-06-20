@@ -159,6 +159,7 @@ print_install "Membuat direktori xray"
     export IP=$( curl -s https://ipinfo.io/ip/ )
 
  # Mendapatkan ID dan versi OS
+install_haproxy_dependencies() {
     OS_ID=$(grep -w ID /etc/os-release | head -n1 | sed 's/ID=//g' | sed 's/"//g')
     OS_VERSION_ID=$(grep -w VERSION_ID /etc/os-release | head -n1 | sed 's/VERSION_ID=//g' | sed 's/"//g')
     OS_PRETTY_NAME=$(grep -w PRETTY_NAME /etc/os-release | head -n1 | sed 's/PRETTY_NAME=//g' | sed 's/"//g')
