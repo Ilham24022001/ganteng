@@ -1,0 +1,321 @@
+#!/bin/bash
+# OpenVPN Auto-Installer for Ubuntu 24.04
+# Complete version with all dependencies and configuration
+
+# Check root
+if [ "$(id -u)" != "0" ]; then
+   echo "This script must be run as root" 1>&2
+   exit 1
+fi
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+NC='\033[0m'
+
+# Variables
+IP=$(curl -4 icanhazip.com)
+DOMAIN=$(curl -4 icanhazip.com)  # Change this to your domain if available
+PORT_TCP=1194
+PORT_UDP=2200
+
+# Functions
+function print_status {
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}[OK]${NC} $1"
+    else
+        echo -e "${RED}[FAIL]${NC} $1"
+        exit 1
+    fi
+}
+
+function install_packages {
+    echo -e "${YELLOW}[INFO]${NC} Updating packages..."
+    apt-get update -qq
+    print_status "Package list updated"
+
+    echo -e "${YELLOW}[INFO]${NC} Installing required packages..."
+    apt-get install -qq -y openvpn easy-rsa openssl iptables net-tools uuid-runtime
+    print_status "Core packages installed"
+
+    echo -e "${YELLOW}[INFO]${NC} Installing additional dependencies..."
+    apt-get install -qq -y ca-certificates wget net-tools gnupg
+    print_status "Additional packages installed"
+}
+
+function configure_easyrsa {
+    echo -e "${YELLOW}[INFO]${NC} Setting up Easy-RSA..."
+    cp -r /usr/share/easy-rsa /etc/openvpn/server/
+    cd /etc/openvpn/server/easy-rsa
+    chmod +x easyrsa
+    chown -R root:root .
+    ./easyrsa init-pki
+    echo -e "${YELLOW}[INFO]${NC} Generating CA certificate..."
+    ./easyrsa build-ca nopass << EOF
+
+EOF
+    print_status "CA certificate generated"
+
+    echo -e "${YELLOW}[INFO]${NC} Generating server certificate..."
+    ./easyrsa build-server-full server nopass
+    print_status "Server certificate generated"
+
+    echo -e "${YELLOW}[INFO]${NC} Generating Diffie-Hellman parameters..."
+    ./easyrsa gen-dh
+    print_status "DH parameters generated"
+
+    echo -e "${YELLOW}[INFO]${NC} Generating TLS key..."
+    openvpn --genkey --secret pki/ta.key
+    print_status "TLS key generated"
+
+    # Copy files to server directory
+    cp pki/ca.crt pki/issued/server.crt pki/private/server.key pki/dh.pem pki/ta.key ../
+    cd ..
+}
+
+function create_server_configs {
+    echo -e "${YELLOW}[INFO]${NC} Creating server configurations..."
+
+    # TCP Config
+    cat > /etc/openvpn/server/server-tcp.conf <<EOF
+port $PORT_TCP
+proto tcp
+dev tun
+ca ca.crt
+cert server.crt
+key server.key
+dh dh.pem
+server 10.8.0.0 255.255.255.0
+ifconfig-pool-persist ipp-tcp.txt
+push "redirect-gateway def1 bypass-dhcp"
+push "dhcp-option DNS 8.8.8.8"
+push "dhcp-option DNS 8.8.4.4"
+keepalive 10 120
+tls-auth ta.key 0
+cipher AES-256-CBC
+persist-key
+persist-tun
+status openvpn-status-tcp.log
+log-append openvpn-tcp.log
+verb 3
+explicit-exit-notify 0
+EOF
+
+    # UDP Config
+    cat > /etc/openvpn/server/server-udp.conf <<EOF
+port $PORT_UDP
+proto udp
+dev tun
+ca ca.crt
+cert server.crt
+key server.key
+dh dh.pem
+server 10.9.0.0 255.255.255.0
+ifconfig-pool-persist ipp-udp.txt
+push "redirect-gateway def1 bypass-dhcp"
+push "dhcp-option DNS 8.8.8.8"
+push "dhcp-option DNS 8.8.4.4"
+keepalive 10 120
+tls-auth ta.key 0
+cipher AES-256-CBC
+persist-key
+persist-tun
+status openvpn-status-udp.log
+log-append openvpn-udp.log
+verb 3
+explicit-exit-notify 1
+EOF
+
+    print_status "Server configurations created"
+}
+
+function setup_systemd {
+    echo -e "${YELLOW}[INFO]${NC} Creating systemd service..."
+
+    cat > /etc/systemd/system/openvpn-server@.service <<EOF
+[Unit]
+Description=OpenVPN service for %I
+After=network.target
+
+[Service]
+Type=notify
+PrivateTmp=true
+ExecStart=/usr/sbin/openvpn --status /run/openvpn-server/%i.status 10 --cd /etc/openvpn/server --config %i.conf --writepid /run/openvpn-server/%i.pid
+ExecReload=/bin/kill -HUP \$MAINPID
+LimitNPROC=10
+DeviceAllow=/dev/null rw
+DeviceAllow=/dev/net/tun rw
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    # Create runtime directory
+    mkdir -p /run/openvpn-server
+    chown nobody:nogroup /run/openvpn-server
+
+    systemctl daemon-reload
+    print_status "Systemd service configured"
+}
+
+function enable_ip_forwarding {
+    echo -e "${YELLOW}[INFO]${NC} Enabling IP forwarding..."
+    sed -i 's/#net.ipv4.ip_forward=1/net.ipv4.ip_forward=1/g' /etc/sysctl.conf
+    sysctl -p > /dev/null
+    print_status "IP forwarding enabled"
+}
+
+function configure_firewall {
+    echo -e "${YELLOW}[INFO]${NC} Configuring firewall..."
+
+    if command -v ufw >/dev/null; then
+        ufw allow $PORT_TCP/tcp
+        ufw allow $PORT_UDP/udp
+        echo -e "${YELLOW}[INFO]${NC} Added firewall rules for OpenVPN ports"
+    fi
+
+    # Basic iptables rules
+    iptables -t nat -A POSTROUTING -s 10.8.0.0/24 -o eth0 -j MASQUERADE
+    iptables -t nat -A POSTROUTING -s 10.9.0.0/24 -o eth0 -j MASQUERADE
+    print_status "Firewall configured"
+}
+
+function create_client_configs {
+    echo -e "${YELLOW}[INFO]${NC} Creating client configuration templates..."
+
+    mkdir -p /etc/openvpn/clients
+
+    # TCP Client Config
+    cat > /etc/openvpn/clients/client-tcp.ovpn <<EOF
+client
+dev tun
+proto tcp
+remote $DOMAIN $PORT_TCP
+resolv-retry infinite
+nobind
+persist-key
+persist-tun
+remote-cert-tls server
+auth-user-pass
+cipher AES-256-CBC
+verb 3
+EOF
+
+    # UDP Client Config
+    cat > /etc/openvpn/clients/client-udp.ovpn <<EOF
+client
+dev tun
+proto udp
+remote $DOMAIN $PORT_UDP
+resolv-retry infinite
+nobind
+persist-key
+persist-tun
+remote-cert-tls server
+auth-user-pass
+cipher AES-256-CBC
+verb 3
+EOF
+
+    # Add certificates to client configs
+    echo "<ca>" >> /etc/openvpn/clients/client-tcp.ovpn
+    cat /etc/openvpn/server/ca.crt >> /etc/openvpn/clients/client-tcp.ovpn
+    echo "</ca>" >> /etc/openvpn/clients/client-tcp.ovpn
+
+    echo "<ca>" >> /etc/openvpn/clients/client-udp.ovpn
+    cat /etc/openvpn/server/ca.crt >> /etc/openvpn/clients/client-udp.ovpn
+    echo "</ca>" >> /etc/openvpn/clients/client-udp.ovpn
+
+    print_status "Client configurations created"
+}
+
+function start_services {
+    echo -e "${YELLOW}[INFO]${NC} Starting OpenVPN services..."
+
+    systemctl enable --now openvpn-server@server-tcp
+    systemctl enable --now openvpn-server@server-udp
+
+    sleep 3  # Give services time to start
+
+    systemctl is-active --quiet openvpn-server@server-tcp && echo -e "${GREEN}[OK]${NC} OpenVPN TCP service is running" || echo -e "${RED}[FAIL]${NC} OpenVPN TCP service failed to start"
+    systemctl is-active --quiet openvpn-server@server-udp && echo -e "${GREEN}[OK]${NC} OpenVPN UDP service is running" || echo -e "${RED}[FAIL]${NC} OpenVPN UDP service failed to start"
+}
+
+function create_management_script {
+    echo -e "${YELLOW}[INFO]${NC} Creating management script..."
+
+    cat > /usr/local/bin/manage-openvpn <<'EOF'
+#!/bin/bash
+# OpenVPN Management Script
+
+case "$1" in
+    status)
+        echo "OpenVPN Status:"
+        systemctl status openvpn-server@server-tcp --no-pager
+        echo ""
+        systemctl status openvpn-server@server-udp --no-pager
+        ;;
+    restart)
+        systemctl restart openvpn-server@server-tcp
+        systemctl restart openvpn-server@server-udp
+        echo "OpenVPN services restarted"
+        ;;
+    logs)
+        echo "TCP Logs:"
+        tail -20 /etc/openvpn/server/openvpn-tcp.log
+        echo ""
+        echo "UDP Logs:"
+        tail -20 /etc/openvpn/server/openvpn-udp.log
+        ;;
+    add-client)
+        if [ -z "$2" ]; then
+            echo "Usage: $0 add-client <clientname>"
+            exit 1
+        fi
+        cd /etc/openvpn/server/easy-rsa
+        ./easyrsa build-client-full "$2" nopass
+        cp /etc/openvpn/clients/client-tcp.ovpn /etc/openvpn/clients/"$2".ovpn
+        sed -i "s|auth-user-pass|auth-user-pass /etc/openvpn/clients/"$2".auth|" /etc/openvpn/clients/"$2".ovpn
+        echo "client" > /etc/openvpn/clients/"$2".auth
+        echo "password" >> /etc/openvpn/clients/"$2".auth
+        echo "Client $2 created. Configuration file: /etc/openvpn/clients/$2.ovpn"
+        ;;
+    *)
+        echo "Usage: $0 {status|restart|logs|add-client}"
+        exit 1
+        ;;
+esac
+EOF
+
+    chmod +x /usr/local/bin/manage-openvpn
+    print_status "Management script created"
+}
+
+function show_final_instructions {
+    echo -e "\n${GREEN}=== OpenVPN Installation Complete ===${NC}"
+    echo -e "Server IP: $IP"
+    echo -e "TCP Port: $PORT_TCP"
+    echo -e "UDP Port: $PORT_UDP"
+    echo -e "\n${YELLOW}Client configuration files:${NC}"
+    echo -e "TCP: /etc/openvpn/clients/client-tcp.ovpn"
+    echo -e "UDP: /etc/openvpn/clients/client-udp.ovpn"
+    echo -e "\n${YELLOW}Management commands:${NC}"
+    echo -e "Check status: manage-openvpn status"
+    echo -e "Restart services: manage-openvpn restart"
+    echo -e "View logs: manage-openvpn logs"
+    echo -e "Add client: manage-openvpn add-client <name>"
+    echo -e "\n${GREEN}OpenVPN is ready to use!${NC}"
+}
+
+# Main installation process
+install_packages
+configure_easyrsa
+create_server_configs
+setup_systemd
+enable_ip_forwarding
+configure_firewall
+create_client_configs
+start_services
+create_management_script
+show_final_instructions
