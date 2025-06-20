@@ -15,8 +15,8 @@ YELLOW='\033[0;33m'
 NC='\033[0m'
 
 # Variables
-IP=$(curl -4 icanhazip.com)
-DOMAIN=$(curl -4 icanhazip.com)  # Change this to your domain if available
+IP=$(wget -qO- ipinfo.io/ip)
+DOMAIN=$(cat /root/domain)  # Change this to your domain if available
 PORT_TCP=1194
 PORT_UDP=2200
 
