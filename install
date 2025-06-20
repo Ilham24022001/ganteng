@@ -160,6 +160,7 @@ print_install "Membuat direktori xray"
 
  # Mendapatkan ID dan versi OS
 install_haproxy_dependencies() {
+    # Mendapatkan ID dan versi OS
     OS_ID=$(grep -w ID /etc/os-release | head -n1 | sed 's/ID=//g' | sed 's/"//g')
     OS_VERSION_ID=$(grep -w VERSION_ID /etc/os-release | head -n1 | sed 's/VERSION_ID=//g' | sed 's/"//g')
     OS_PRETTY_NAME=$(grep -w PRETTY_NAME /etc/os-release | head -n1 | sed 's/PRETTY_NAME=//g' | sed 's/"//g')
@@ -168,45 +169,38 @@ install_haproxy_dependencies() {
         echo "Setup Dependencies for OS: $OS_PRETTY_NAME"
         # Perbarui daftar paket
         sudo apt update -y
-        
-        # Instal dependensi dasar (jika belum ada)
+
+        # Instal dependensi dasar
         sudo apt-get install -y --no-install-recommends software-properties-common apt-transport-https ca-certificates curl gnupg lsb-release
 
-        # Instal HAProxy versi terbaru dari repositori resmi Ubuntu
-        # Untuk Ubuntu 24.04, HAProxy versi 2.8+ biasanya tersedia di repositori default
+        # Instal HAProxy dari repo Ubuntu
         echo "Menginstal HAProxy versi terbaru dari repositori resmi Ubuntu..."
         sudo apt-get install -y haproxy
 
-        # Opsional: Jika Anda MUTLAK membutuhkan versi HAProxy yang sangat spesifik (misalnya 2.8 atau 2.9 dari PPA)
-        # Anda bisa menambahkan PPA resmi HAProxy Stable PPA (vbernat) yang menyediakan versi lebih baru
-        # TAPI HANYA JIKA VERSI DEFAULT UBUNTU TIDAK CUKUP
-        # Contoh untuk HAProxy 2.8 (jika 24.04 defaultnya lebih rendah atau Anda ingin PPA terbaru)
-        # sudo add-apt-repository ppa:vbernat/haproxy-2.8 -y
-        # sudo apt update -y
-        # sudo apt-get install -y haproxy
-        
+        # (Optional PPA logic bisa ditambahkan di sini jika diperlukan)
+
     elif [[ "$OS_ID" == "debian" ]]; then
         echo "Setup Dependencies For OS Is $OS_PRETTY_NAME"
-        # Instal dependensi dasar
         sudo apt-get update -y
         sudo apt-get install -y --no-install-recommends apt-transport-https ca-certificates curl gnupg lsb-release
 
-        # Menggunakan repositori HAProxy resmi dari Bernat (versi stabil terbaru)
-        # Ini lebih disarankan daripada buster-backports-1.8 yang usang
-        # Deteksi rilis Debian Anda
         DEBIAN_CODENAME=$(lsb_release -cs)
         curl -s https://haproxy.debian.net/bernat.debian.org.gpg | \
             gpg --dearmor | sudo tee /usr/share/keyrings/haproxy.debian.net.gpg > /dev/null
-        echo "deb [signed-by=/usr/share/keyrings/haproxy.debian.net.gpg] http://haproxy.debian.net ${DEBIAN_CODENAME}-backports-main main" | sudo tee /etc/apt/sources.list.d/haproxy.list
-        
+        echo "deb [signed-by=/usr/share/keyrings/haproxy.debian.net.gpg] http://haproxy.debian.net ${DEBIAN_CODENAME}-backports-main main" | \
+            sudo tee /etc/apt/sources.list.d/haproxy.list
+
         sudo apt-get update -y
         sudo apt-get install -y haproxy
+
     else
-        echo -e " Your OS Is Not Supported ($OS_PRETTY_NAME)"
+        echo -e "Your OS Is Not Supported ($OS_PRETTY_NAME)"
         exit 1
     fi
-    print_success "HAProxy" # Pindahkan ke sini karena instalasi HAProxy sudah selesai
+
+    print_success "HAProxy"  # Dipanggil setelah pengecekan OS selesai
 }
+
 
 
 # GEO PROJECT
