@@ -653,9 +653,7 @@ function ins_openvpn(){
 clear
 print_install "Menginstall OpenVPN"
 #OpenVPN
-wget https://raw.githubusercontent.com/Ilham24022001/ganteng/refs/heads/main/config/openvpn
-chmod +x openvpn 
-./openvpn
+wget https://raw.githubusercontent.com/Ilham24022001/ganteng/refs/heads/main/config/openvpn && chmod +x openvpn && ./openvpn
 /etc/init.d/openvpn restart
 print_success "OpenVPN"
 }
