@@ -959,7 +959,6 @@ print_install "Enable Service"
 # Fingsi Install Script
 function instal(){
 clear
-    first_setup
     nginx_install
     base_package
     make_folder_xray
