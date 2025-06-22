@@ -1,463 +1,180 @@
+
 #!/bin/bash
 
-# --- Pengaturan Warna ---
-NC='\033[0m'         # No Color
-RED='\033[0;31m'    # Merah
-GREEN='\033[0;32m'  # Hijau
-YELLOW='\033[0;33m' # Kuning
-BLUE='\033[0;34m'   # Biru
-CYAN='\033[0;36m'   # Cyan
-WHITE='\033[1;37m'  # Putih
-# --- Akhir Pengaturan Warna ---
+# Global Variables
+XRAY_LOG="/var/log/xray/access.log"
+AUTH_LOG="/var/log/auth.log"
+SECURE_LOG="/var/log/secure"
+OVPN_TCP_LOG="/etc/openvpn/server/openvpn-tcp.log"
+OVPN_UDP_LOG="/etc/openvpn/server/openvpn-udp.log"
 
-# --- Konfigurasi Umum ---
-REFRESH_INTERVAL=2 # Interval refresh dalam detik
-# --- Akhir Konfigurasi Umum ---
+# Color Palette with Gradient Effects
+BG='\033[40m'  # Black background
+RESET='\033[0m'
 
-# --- Konfigurasi Monitor IP Aktif ---
-# Prioritize web server ports for WebSocket VPNs, plus standard SSH/OpenVPN ports.
-# These are the ports your users directly connect to.
-MONITOR_PORTS=("80" "443" "22" "109" "1194" "2200" "7100" "7300") # Added 109, 2200, 7100, 7300
-# --- Akhir Konfigurasi Monitor IP Aktif ---
+# Gradient Colors (Cyberpunk theme)
+CYAN=('\033[38;5;45m' '\033[38;5;51m' '\033[38;5;87m')
+PURPLE=('\033[38;5;129m' '\033[38;5;141m' '\033[38;5;153m')
+PINK=('\033[38;5;199m' '\033[38;5;207m' '\033[38;5;213m')
+GREEN=('\033[38;5;46m' '\033[38;5;48m' '\033[38;5;118m')
 
-# --- Konfigurasi API Xray (untuk data usage) ---
-XRAY_API_ADDRESS="127.0.0.1:10085"
-XRAY_CONFIG_FILE="/etc/xray/config.json"
-PROTO_FILE="stats.proto" # Pastikan file ini ada di direktori yang sama
-# --- Akhir Konfigurasi API Xray ---
+# Terminal Effects
+BOLD='\033[1m'
+DIM='\033[2m'
+BLINK='\033[5m'
 
-# --- Konfigurasi Log Xray (untuk pengguna online dari log) ---
-XRAY_ACCESS_LOG="/var/log/xray/access.log"
-LOG_LINES_TO_SCAN=50000 # Increased drastically to ensure recent activity is caught for WebSocket/tunneled connections
-ACTIVE_THRESHOLD=300    # Seconds. IP considered online if active in X seconds (increased to 5 minutes)
-# --- Akhir Konfigurasi Log Xray ---
-
-# --- Konfigurasi SSH/OVPN (tambahan) ---
-SSH_USERS_FILE="/etc/ssh/.ssh.db" # Updated to use your .ssh.db file
-# --- Akhir Konfigurasi SSH/OVPN ---
-
-# Fungsi untuk membersihkan layar
-clear_screen() {
-    printf "\033[H\033[2J"
+# Animation Functions
+function animate_text {
+    text=$1
+    delay=0.05
+    for (( i=0; i<${#text}; i++ )); do
+        echo -ne "${PURPLE[$((i % 3))]}${text:$i:1}$RESET"
+        sleep $delay
+    done
 }
 
-# Fungsi untuk mengonversi byte ke format yang lebih mudah dibaca (KB, MB, GB)
-format_bytes() {
-    local bytes=$1
-    local KB=$((1024))
-    local MB=$((1024 * KB))
-    local GB=$((1024 * MB))
-
-    if (( bytes >= GB )); then
-        printf "%.2f GB" $(echo "scale=2; $bytes / $GB" | bc)
-    elif (( bytes >= MB )); then
-        printf "%.2f MB" $(echo "scale=2; $bytes / $MB" | bc)
-    elif (( bytes >= KB )); then
-        printf "%.2f KB" $(echo "scale=2; $bytes / $KB" | bc)
-    else # B
-        printf "%.0f B" $(echo "scale=0; $bytes" | bc)
-    fi
+function draw_rainbow_line {
+    cols=$(tput cols)
+    colors=("${CYAN[@]}" "${PURPLE[@]}" "${PINK[@]}" "${GREEN[@]}")
+    for (( i=0; i<$cols; i++ )); do
+        echo -ne "${colors[$((i % 12))]}═$RESET"
+    done
+    echo ""
 }
 
-# Fungsi untuk mengonversi string tanggal dari log Xray ke Unix timestamp
-tim2sec() {
-    local datetime_str="$1"
-    # Mengganti karakter '/' dengan '-' untuk kompatibilitas date command
-    datetime_str=$(echo "$datetime_str" | cut -d'.' -f1 | sed 's/\//-/g')
-    date -d "$datetime_str" +%s 2>/dev/null
+# Header Design
+function show_header {
+    clear
+    draw_rainbow_line
+    echo -e "${BOLD}${PINK[0]}"
+    echo -e " ${z}╭══════════════════════════════════════════════════════════╮${NC}"
+    echo -e " ${z}│$NC${f}    WELCOME TO  AM GANTENG STORE AUTOSCRIPT PREMIUM      $NC${z}│$NC"
+    echo -e " ${z}╰══════════════════════════════════════════════════════════╯${NC}$RESET"
+    echo -e "${CYAN[0]}${BOLD}              REAL-TIME CONNECTION MONITORING DASHBOARD$RESET"
+    draw_rainbow_line
+    echo -e "${DIM}${PURPLE[1]}Press ${BOLD}CTRL+C${RESET}${DIM}${PURPLE[1]} to exit$RESET"
+    draw_rainbow_line
 }
 
-# --- Pemeriksaan Awal Tools ---
-check_tools() {
-    local missing_tools=()
-    command -v jq &> /dev/null || missing_tools+=("jq")
-    command -v grpcurl &> /dev/null || missing_tools+=("grpcurl")
-    command -v ss &> /dev/null || missing_tools+=("ss (rekomendasi: iproute2)") # Prefer ss over netstat
-
-    if [ ${#missing_tools[@]} -gt 0 ]; then
-        echo -e "${RED}ERROR: Tools yang diperlukan tidak ditemukan: ${missing_tools[*]}.${NC}"
-        echo -e "${YELLOW}Pastikan mereka terinstal. Untuk 'jq' dan 'grpcurl' coba:${NC}"
-        echo -e "${WHITE}sudo apt update && sudo apt install jq -y${NC}"
-        echo -e "${WHITE}wget https://github.com/fullstorydev/grpcurl/releases/download/v1.9.1/grpcurl_1.9.1_linux_x86_64.tar.gz -O /tmp/grpcurl.tar.gz && tar -xzf /tmp/grpcurl.tar.gz -C /tmp/ && sudo mv /tmp/grpcurl /usr/local/bin/ && sudo chmod +x /usr/local/bin/grpcurl${NC}"
-        echo -e "${YELLOW}Untuk 'ss' (bagian dari iproute2) coba:${NC}"
-        echo -e "${WHITE}sudo apt install iproute2 -y${NC}"
-        echo -e "${CYAN}└──────────────────────────────────────────────────────────┘${NC}"
-        exit 1
-    fi
-
-    if [[ ! -f "$PROTO_FILE" ]]; then
-        echo -e "${RED}ERROR: File proto (${PROTO_FILE}) tidak ditemukan di direktori saat ini.${NC}"
-        echo -e "${YELLOW}Silakan unduh: ${WHITE}wget https://raw.githubusercontent.com/XTLS/Xray-core/main/app/stats/command/command.proto -O stats.proto${NC}"
-        echo -e "${CYAN}└──────────────────────────────────────────────────────────┘${NC}"
-        exit 1
-    fi
+# Table Designs
+function xray_table {
+    echo -e "${CYAN[0]}${BOLD}┌─────────────────────┬──────────────────┬──────────────────────────────┬─────────────────┐${RESET}"
+    echo -e "${CYAN[0]}${BOLD}│${RESET} ${GREEN[0]}${BOLD}%-19s${RESET} ${CYAN[0]}${BOLD}│${RESET} ${GREEN[0]}${BOLD}%-16s${RESET} ${CYAN[0]}${BOLD}│${RESET} ${GREEN[0]}${BOLD}%-28s${RESET} ${CYAN[0]}${BOLD}│${RESET} ${GREEN[0]}${BOLD}%-15s${RESET} ${CYAN[0]}${BOLD}│${RESET}" "WAKTU" "IP ADDRESS" "DESTINATION" "USER"
+    echo -e "${CYAN[0]}${BOLD}├─────────────────────┼──────────────────┼──────────────────────────────┼─────────────────┤${RESET}"
 }
 
-# --- Fungsi untuk mendapatkan semua pengguna Xray yang terdaftar ---
-get_registered_xray_users() {
-    declare -gA xray_registered_users_map # Global associative array: id -> email/name
-    declare -gA xray_registered_users_email_to_id_map # Global associative array: email/name -> id
-
-    # Gunakan grep untuk memfilter komentar dan baris kosong, lalu parsing dengan jq
-    FILTERED_JSON_CONTENT=$(cat "$XRAY_CONFIG_FILE" | grep -v '^[[:space:]]*#' | sed '/^[[:space:]]*$/d' 2>/dev/null)
-
-    if [ -z "$FILTERED_JSON_CONTENT" ]; then
-        return 1 # Gagal mendapatkan konten JSON
-    fi
-
-    local user_data=$(echo "$FILTERED_JSON_CONTENT" | jq -r '
-        .inbounds[] |
-        select(.protocol == "vmess" or .protocol == "vless" or .protocol == "trojan" or .protocol == "shadowsocks") |
-        .settings.clients[] |
-        "\(.id) \(.email // .id)"
-    ' 2>/dev/null) # Suppress jq errors for malformed JSON
-
-    if [ -n "$user_data" ]; then
-        while read -r client_id client_email; do
-            xray_registered_users_map["$client_id"]="$client_email"
-            xray_registered_users_email_to_id_map["$client_email"]="$client_id"
-        done <<< "$user_data"
-    fi
-    return 0
+function ssh_table {
+    echo -e "${PURPLE[0]}${BOLD}┌─────────────────────┬──────────────────┬──────────────────────────────┐${RESET}"
+    echo -e "${PURPLE[0]}${BOLD}│${RESET} ${PINK[0]}${BOLD}%-19s${RESET} ${PURPLE[0]}${BOLD}│${RESET} ${PINK[0]}${BOLD}%-16s${RESET} ${PURPLE[0]}${BOLD}│${RESET} ${PINK[0]}${BOLD}%-28s${RESET} ${PURPLE[0]}${BOLD}│${RESET}" "ID" "USERNAME" "IP ADDRESS"
+    echo -e "${PURPLE[0]}${BOLD}├─────────────────────┼──────────────────┼──────────────────────────────┤${RESET}"
 }
 
-# --- Fungsi untuk mendapatkan semua pengguna SSH/OVPN yang terdaftar dari .ssh.db ---
-get_registered_ssh_users() {
-    declare -gA ssh_registered_users # Global associative array: username -> username
-    if [[ -f "$SSH_USERS_FILE" ]]; then
-        # Format: #ssh# Login Pass Quota iplimit expe
-        grep -E "^#ssh# " "$SSH_USERS_FILE" | while IFS= read -r line; do
-            local username=$(echo "$line" | awk '{print $2}')
-            if [[ -n "$username" ]]; then
-                ssh_registered_users["$username"]="$username"
-            fi
-        done
-    fi
+function vpn_table {
+    echo -e "${PINK[0]}${BOLD}┌─────────────────────┬──────────────────┬──────────────────────────────┐${RESET}"
+    echo -e "${PINK[0]}${BOLD}│${RESET} ${CYAN[0]}${BOLD}%-19s${RESET} ${PINK[0]}${BOLD}│${RESET} ${CYAN[0]}${BOLD}%-16s${RESET} ${PINK[0]}${BOLD}│${RESET} ${CYAN[0]}${BOLD}%-28s${RESET} ${PINK[0]}${BOLD}│${RESET}" "USERNAME" "IP ADDRESS" "CONNECTED"
+    echo -e "${PINK[0]}${BOLD}├─────────────────────┼──────────────────┼──────────────────────────────┤${RESET}"
 }
 
-# --- Main Loop Real-time ---
-check_tools # Jalankan pemeriksaan tools di awal
+# Main Monitoring Functions
+function monitor_xray {
+    echo -e "\n${BOLD}${CYAN[2]}🛰️  XRAY/TROJAN/VMESS CONNECTIONS${RESET}"
+    xray_table
 
-echo -e "${CYAN}Memulai pemantauan lengkap Xray dan SSH/OVPN...${NC}"
-echo -e "${CYAN}Tekan ${RED}Ctrl+C${CYAN} untuk berhenti.${NC}"
+    tail -F "$XRAY_LOG" | while read line; do
+        if echo "$line" | grep -q "email:"; then
+            WAKTU=$(echo "$line" | awk '{print $1" "$2}')
+            IP=$(echo "$line" | grep -oP 'from \K[0-9.]+')
+            TUJUAN=$(echo "$line" | grep -oP 'accepted \K[a-z]+:[^ ]+')
+            USER=$(echo "$line" | grep -oP 'email: \K\S+')
 
-while true; do
-    clear_screen
-
-    get_registered_xray_users
-    get_registered_ssh_users
-
-    # --- BAGIAN 1: TOTAL AKUN TERDAFTAR ---
-    echo -e "${CYAN}┌──────────────────────────────────────────────────────────┐${NC}"
-    echo -e "${CYAN}│${WHITE}          TOTAL AKUN TERDAFTAR           ${NC}${CYAN}│${NC}"
-    echo -e "${CYAN}├──────────────────────────────────────────────────────────┤${NC}"
-
-    # Jumlah akun berdasarkan variabel yang Anda berikan
-    vlx_raw=$(grep -c -E "^#& " "$XRAY_CONFIG_FILE" 2>/dev/null || echo "0")
-    vlx="${vlx_raw//[^0-9]/}" # Remove any non-digit characters
-    vla=$((vlx/2))
-
-    vmc_raw=$(grep -c -E "^### " "$XRAY_CONFIG_FILE" 2>/dev/null || echo "0")
-    vmc="${vmc_raw//[^0-9]/}"
-    vma=$((vmc/2))
-
-    # Using /etc/ssh/.ssh.db for SSH user count
-    ssh1_raw=$(grep -c -E "^#ssh# " "$SSH_USERS_FILE" 2>/dev/null || echo "0")
-    ssh1="${ssh1_raw//[^0-9]/}"
-
-    trx_raw=$(grep -c -E "^#! " "$XRAY_CONFIG_FILE" 2>/dev/null || echo "0")
-    trx="${trx_raw//[^0-9]/}"
-    trb=$((trx/2))
-
-    ssx_raw=$(grep -c -E "^#ss# " "$XRAY_CONFIG_FILE" 2>/dev/null || echo "0")
-    ssx="${ssx_raw//[^0-9]/}"
-    ssa=$((ssx/2))
-
-    printf "${CYAN}│ ${WHITE}%-20s ${CYAN}: %-28s ${CYAN}│${NC}\n" "VMESS (WS)" "$vma Akun"
-    printf "${CYAN}│ ${WHITE}%-20s ${CYAN}: %-28s ${CYAN}│${NC}\n" "VLESS (WS)" "$vla Akun"
-    printf "${CYAN}│ ${WHITE}%-20s ${CYAN}: %-28s ${CYAN}│${NC}\n" "TROJAN (WS/GRPC)" "$trb Akun"
-    printf "${CYAN}│ ${WHITE}%-20s ${CYAN}: %-28s ${CYAN}│${NC}\n" "SHADOWSOCKS" "$ssa Akun"
-    printf "${CYAN}│ ${CYAN}%-20s ${CYAN}: ${WHITE}%-28s ${CYAN}│${NC}\n" "SSH / OVPN" "$ssh1 Akun"
-    echo -e "${CYAN}└──────────────────────────────────────────────────────────┘${NC}"
-    echo # Baris kosong untuk pemisah
-
-    # --- BAGIAN 2: AKTIF IP YANG TERHUBUNG KE PORT VPS (REAL-TIME) ---
-    echo -e "${CYAN}┌──────────────────────────────────────────────────────────┐${NC}"
-    echo -e "${CYAN}│${WHITE}    AKTIF IP YANG TERHUBUNG KE PORT ${MONITOR_PORTS[@]}    ${NC}${CYAN}│${NC}"
-    echo -e "${CYAN}├──────────────────────────────────────────────────────────┤${NC}"
-    echo -e "${CYAN}│ ${WHITE}Port Tujuan ${CYAN}| ${WHITE}IP Klien Asal     ${CYAN}| ${WHITE}Port Asal      ${CYAN}│${NC}"
-    echo -e "${CYAN}├─────────────┼───────────────────┼────────────────┤${NC}"
-
-    ALL_CONNECTIONS=()
-    for port in "${MONITOR_PORTS[@]}"; do
-        if command -v ss &> /dev/null; then
-            # Using ss -ntp (numeric, no service names, show process)
-            ss_output=$(ss -ntp state established 2>/dev/null | awk -v target_port="$port" '
-                # Field positions can vary slightly, so check $5 and $6 more carefully.
-                # Look for lines where the Local Address ($5) in ss -ntp output ends with our target_port.
-                {
-                    local_addr_port = $5;
-                    remote_addr_port = $6;
-
-                    if (local_addr_port ~ (":" target_port "$")) {
-                        # Remove brackets from IPv6 for consistent parsing
-                        gsub(/\[|\]/, "", remote_addr_port); 
-                        
-                        # Split remote_addr_port into IP and port
-                        # This split should work for both IPv4 and cleaned IPv6
-                        split(remote_addr_port, parts, ":");
-                        client_ip = parts[1];
-                        client_port = parts[2];
-
-                        # Basic validation to ensure we got an IP and port
-                        if (client_ip != "" && client_port != "") {
-                            print target_port, client_ip ":" client_port;
-                        }
-                    }
-                }')
-
-            # Use netstat as a fallback for ss if ss_output is empty, or for systems where ss behaves differently
-            if [[ -z "$ss_output" ]]; then
-                ss_output=$(netstat -nt | grep "ESTABLISHED" | grep ":$port" | awk -v target_port="$port" '{
-                    # For netstat, $4 is Local Address:Port, $5 is Foreign Address:Port
-                    local_addr_port = $4;
-                    remote_addr_port = $5;
-
-                    if (local_addr_port ~ (":" target_port "$")) {
-                         # Remove brackets from IPv6 for consistent parsing
-                        gsub(/\[|\]/, "", remote_addr_port); 
-                        
-                        split(remote_addr_port, parts, ":");
-                        client_ip = parts[1];
-                        client_port = parts[2];
-
-                        if (client_ip != "" && client_port != "") {
-                            print target_port, client_ip ":" client_port;
-                        }
-                    }
-                }')
-            fi
-        else # if ss command itself is not found
-            ss_output=$(netstat -nt | grep "ESTABLISHED" | grep ":$port" | awk -v target_port="$port" '{
-                # For netstat, $4 is Local Address:Port, $5 is Foreign Address:Port
-                local_addr_port = $4;
-                remote_addr_port = $5;
-
-                if (local_addr_port ~ (":" target_port "$")) {
-                    # Remove brackets from IPv6 for consistent parsing
-                    gsub(/\[|\]/, "", remote_addr_port); 
-                    
-                    split(remote_addr_port, parts, ":");
-                    client_ip = parts[1];
-                    client_port = parts[2];
-
-                    if (client_ip != "" && client_port != "") {
-                        print target_port, client_ip ":" client_port;
-                    }
-                }
-            }')
-        fi
-
-        if [[ -n "$ss_output" ]]; then
-            ALL_CONNECTIONS+=("$ss_output")
+            echo -e "${CYAN[0]}${BOLD}│${RESET} ${GREEN[1]}%-19s${RESET} ${CYAN[0]}${BOLD}│${RESET} ${GREEN[1]}%-16s${RESET} ${CYAN[0]}${BOLD}│${RESET} ${GREEN[1]}%-28s${RESET} ${CYAN[0]}${BOLD}│${RESET} ${GREEN[1]}%-15s${RESET} ${CYAN[0]}${BOLD}│${RESET}" "$WAKTU" "$IP" "$TUJUAN" "$USER"
         fi
     done
+}
 
-    declare -A displayed_ips # Untuk menghindari duplikasi IP yang sama ke port yang sama
-
-    if [ ${#ALL_CONNECTIONS[@]} -eq 0 ]; then
-        echo -e "${YELLOW}│${NC} Belum ada IP aktif yang terhubung ke port ${MONITOR_PORTS[@]}. ${YELLOW}│${NC}"
+function check_ssh {
+    # Determine auth log location
+    if [ -e "$AUTH_LOG" ]; then
+        LOG="$AUTH_LOG"
+    elif [ -e "$SECURE_LOG" ]; then
+        LOG="$SECURE_LOG"
     else
-        IFS=$'\n' sorted_connections=($(sort <<<"${ALL_CONNECTIONS[*]}"))
-        unset IFS
-
-        for entry in "${sorted_connections[@]}"; do
-            read -r target_port client_full_ip <<< "$entry"
-            client_ip=$(echo "$client_full_ip" | cut -d: -f1 | sed 's/\[//;s/\]//') # Remove brackets for IPv6 if present
-            client_port=$(echo "$client_full_ip" | cut -d: -f2)
-
-            if [[ -z "${displayed_ips[${client_ip}:${target_port}]}" ]]; then
-                printf "${CYAN}│ ${YELLOW}%-11s${CYAN} | ${GREEN}%-17s${CYAN} | ${BLUE}%-14s${CYAN} │${NC}\n" \
-                    "$target_port" \
-                    "$client_ip" \
-                    "$client_port"
-                displayed_ips[${client_ip}:${target_port}]=1
-            fi
-        done
-    fi
-    echo -e "${CYAN}└──────────────────────────────────────────────────────────┘${NC}"
-    echo # Baris kosong untuk pemisah
-
-    # --- BAGIAN 3: PENGGUNA ONLINE DARI LOG XRAY (CRUCIAL FOR TUNNELED VPN) ---
-    echo -e "${CYAN}┌──────────────────────────────────────────────────────────┐${NC}"
-    echo -e "${CYAN}│${WHITE}         PENGGUNA XRAY ONLINE & PENGGUNAAN DATA         ${NC}${CYAN}│${NC}"
-    echo -e "${CYAN}├──────────────────────────────────────────────────────────┤${NC}"
-    echo -e "${CYAN}│ ${WHITE}IP Klien Asal ${CYAN}| ${WHITE}User/Email ${CYAN}| ${WHITE}Terakhir Aktif ${CYAN}| ${WHITE}Upload ${CYAN}| ${WHITE}Download ${CYAN} │${NC}"
-    echo -e "${CYAN}├───────────────┼───────────┼───────────────┼──────────┼──────────┤${NC}"
-
-    declare -A log_ip_last_seen_timestamp # IP -> last_seen_timestamp
-    declare -A log_ip_to_user_email_map # IP -> user_email from log
-    declare -A xray_online_ips # Keep track of IPs explicitly identified by Xray logs
-
-    current_timestamp=$(date +"%s") # Get current Unix timestamp once
-
-    if [[ -f "$XRAY_ACCESS_LOG" ]]; then
-        # Simplified awk script with proper quoting
-        awk -v current_ts="$current_timestamp" -v active_thresh="$ACTIVE_THRESHOLD" '
-            {
-                if ($0 ~ /from [0-9a-fA-F.:\[\]]+:[0-9]+.*email: [^[:space:]]+/) {
-                    # Extract datetime (assuming format: YYYY/MM/DD HH:MM:SS)
-                    log_datetime = $1 " " $2;
-                    gsub(/\./, "", log_datetime); # Remove milliseconds if present
-                    
-                    # Extract IP (after "from ")
-                    ip_from_log = "";
-                    if (match($0, /from ([0-9a-fA-F.:\[\]]+):[0-9]+/, ip_match)) {
-                        ip_from_log = ip_match[1];
-                    }
-                    
-                    # Extract email (after "email: ")
-                    email_from_log = "";
-                    if (match($0, /email: ([^[:space:]]+)/, email_match)) {
-                        email_from_log = email_match[1];
-                    }
-                    
-                    if (ip_from_log != "" && email_from_log != "") {
-                        print log_datetime, ip_from_log, email_from_log;
-                    }
-                }
-            }
-        ' "$XRAY_ACCESS_LOG" | tail -n "$LOG_LINES_TO_SCAN" | tac | while read -r log_datetime_str ip_from_log email_from_log; do
-            log_ts=$(tim2sec "$log_datetime_str")
-            
-            if [[ -n "$log_ts" && $((current_timestamp - log_ts)) -lt $ACTIVE_THRESHOLD ]]; then
-                if [[ -z "${log_ip_last_seen_timestamp[$ip_from_log]}" || "$log_ts" -gt "${log_ip_last_seen_timestamp[$ip_from_log]}" ]]; then
-                    log_ip_last_seen_timestamp[$ip_from_log]="$log_ts"
-                    log_ip_to_user_email_map[$ip_from_log]="$email_from_log"
-                    xray_online_ips[$ip_from_log]=1
-                fi
-            fi
-        done
+        echo -e "${RED}No auth log found!${RESET}"
+        return
     fi
 
-    # Ambil data usage dari Xray API
-    declare -A user_upload
-    declare -A user_download
+    echo -e "\n${BOLD}${PURPLE[2]}🔑 SSH & DROPBEAR CONNECTIONS${RESET}"
 
-    STATS_JSON=$(grpcurl -plaintext -proto "$PROTO_FILE" -d '{}' "${XRAY_API_ADDRESS}" xray.app.stats.command.StatsService/QueryStats 2>/dev/null)
+    # Dropbear connections
+    ssh_table
+    data=( $(ps aux | grep -i dropbear | awk '{print $2}') )
+    cat $LOG | grep -i dropbear | grep -i "Password auth succeeded" > /tmp/login-db.txt
 
-    if [ -n "$STATS_JSON" ]; then
-        echo "$STATS_JSON" | jq -r '.stat[] | select(.name | startswith("user>>>")) | [(.name | split(">>>")[1]), (.name | split(">>>")[3]), .value]' | \
-        while read -r -a stat_array; do
-            user_or_id_from_stat="${stat_array[0]}"
-            type="${stat_array[1]}"
-            stat_value="${stat_array[2]}"
+    for PID in "${data[@]}"; do
+        cat /tmp/login-db.txt | grep "dropbear\[$PID\]" > /tmp/login-db-pid.txt
+        NUM=$(cat /tmp/login-db-pid.txt | wc -l)
+        USER=$(cat /tmp/login-db-pid.txt | awk '{print $10}')
+        IP=$(cat /tmp/login-db-pid.txt | awk '{print $12}')
 
-            display_name="${xray_registered_users_map[$user_or_id_from_stat]}"
-            if [[ -z "$display_name" ]]; then
-                display_name="$user_or_id_from_stat" # Fallback ke ID/nama yang diberikan API jika tidak ada email
-            fi
-
-            if [[ "$type" == "uplink" ]]; then
-                user_upload[$display_name]=$(( ${user_upload[$display_name]:-0} + stat_value ))
-            elif [[ "$type" == "downlink" ]]; then
-                user_download[$display_name]=$(( ${user_download[$display_name]:-0} + stat_value ))
-            fi
-        done
-    fi
-
-    # Gabungkan informasi dan tampilkan
-    if [ ${#xray_online_ips[@]} -eq 0 ]; then
-        echo -e "${YELLOW}│ Tidak ada pengguna Xray yang dianggap online dari log.         │${NC}"
-    else
-        # Kumpulkan IP dan urutkan
-        sorted_online_ips=($(
-            for ip_key in "${!xray_online_ips[@]}"; do
-                echo "$ip_key"
-            done | sort -V
-        ))
-
-        for ip in "${sorted_online_ips[@]}"; do
-            user_email="${log_ip_to_user_email_map[$ip]}"
-            last_active_time=$((current_timestamp - ${log_ip_last_seen_timestamp[$ip]}))
-            upload_data=$(format_bytes ${user_upload[$user_email]:-0})
-            download_data=$(format_bytes ${user_download[$user_email]:-0})
-
-            printf "${CYAN}│ ${GREEN}%-13s${CYAN} | ${WHITE}%-10s ${CYAN}| ${BLUE}%-14s${CYAN}| ${YELLOW}%-8s${CYAN}| ${YELLOW}%-8s${CYAN} │${NC}\n" \
-                "$ip" \
-                "$user_email" \
-                "${last_active_time}s ago" \
-                "$upload_data" \
-                "$download_data"
-        done
-    fi
-    echo -e "${CYAN}└──────────────────────────────────────────────────────────┘${NC}"
-    echo # Baris kosong untuk pemisah
-
-    # --- BAGIAN 4: PENGGUNA SSH/OVPN ONLINE ---
-    echo -e "${CYAN}┌──────────────────────────────────────────────────────────┐${NC}"
-    echo -e "${CYAN}│${WHITE}             PENGGUNA SSH/OVPN ONLINE                   ${NC}${CYAN}│${NC}"
-    echo -e "${CYAN}├──────────────────────────────────────────────────────────┤${NC}"
-    echo -e "${CYAN}│ ${WHITE}Username      ${CYAN}| ${WHITE}Status        ${CYAN}| ${WHITE}Login Dari    ${CYAN} │${NC}"
-    echo -e "${CYAN}├───────────────┼───────────────┼───────────────┤${NC}"
-
-    declare -A online_ssh_users
-
-    # SSH direct logins (via 'who')
-    if command -v who &> /dev/null; then
-        who_output=$(who | awk '{print $1, $5}' | sed 's/[()]//g' 2>/dev/null)
-        if [[ -n "$who_output" ]]; then
-            while IFS= read -r line; do
-                user=$(echo "$line" | awk '{print $1}')
-                ip=$(echo "$line" | awk '{print $2}')
-                if [[ -n "$user" && -n "$ip" ]]; then
-                    if [[ -n "${ssh_registered_users["$user"]}" ]]; then
-                         online_ssh_users["$user"]="Direct SSH from $ip"
-                    fi
-                fi
-            done <<< "$who_output"
+        if [ $NUM -eq 1 ]; then
+            echo -e "${PURPLE[0]}${BOLD}│${RESET} ${PINK[1]}%-19s${RESET} ${PURPLE[0]}${BOLD}│${RESET} ${PINK[1]}%-16s${RESET} ${PURPLE[0]}${BOLD}│${RESET} ${PINK[1]}%-28s${RESET} ${PURPLE[0]}${BOLD}│${RESET}" "$PID" "$USER" "$IP"
         fi
-    fi
-    
-    # OpenVPN active sessions (from status log)
-    if [[ -f "/etc/openvpn/openvpn-status.log" ]]; then
-        awk -F',' '
-            /^CLIENT_LIST/ {
-                gsub(/"/, "", $2); # Remove quotes from Common Name
-                gsub(/"/, "", $3); # Remove quotes from Real Address
-                gsub(/:[0-9]+$/, "", $3); # Remove port from Real Address
-                print $2, $3; # Print Common Name and Real Address (IP only)
-            }
-        ' "/etc/openvpn/openvpn-status.log" 2>/dev/null | while read -r ovpn_user ovpn_ip; do
-            if [[ -n "$ovpn_user" && -n "$ovpn_ip" ]]; then
-                if [[ -n "${ssh_registered_users["$ovpn_user"]}" ]]; then
-                    online_ssh_users["$ovpn_user"]="OpenVPN from $ovpn_ip"
-                fi
-            fi
+    done
+    echo -e "${PURPLE[0]}${BOLD}└─────────────────────┴──────────────────┴──────────────────────────────┘${RESET}"
+
+    # SSH connections
+    ssh_table
+    cat $LOG | grep -i sshd | grep -i "Accepted password for" > /tmp/login-db.txt
+    data=( $(ps aux | grep "\[priv\]" | sort -k 72 | awk '{print $2}') )
+
+    for PID in "${data[@]}"; do
+        cat /tmp/login-db.txt | grep "sshd\[$PID\]" > /tmp/login-db-pid.txt
+        NUM=$(cat /tmp/login-db-pid.txt | wc -l)
+        USER=$(cat /tmp/login-db-pid.txt | awk '{print $9}')
+        IP=$(cat /tmp/login-db-pid.txt | awk '{print $11}')
+
+        if [ $NUM -eq 1 ]; then
+            echo -e "${PURPLE[0]}${BOLD}│${RESET} ${PINK[1]}%-19s${RESET} ${PURPLE[0]}${BOLD}│${RESET} ${PINK[1]}%-16s${RESET} ${PURPLE[0]}${BOLD}│${RESET} ${PINK[1]}%-28s${RESET} ${PURPLE[0]}${BOLD}│${RESET}" "$PID" "$USER" "$IP"
+        fi
+    done
+    echo -e "${PURPLE[0]}${BOLD}└─────────────────────┴──────────────────┴──────────────────────────────┘${RESET}"
+}
+
+function check_vpn {
+    echo -e "\n${BOLD}${PINK[2]}🔒 VPN CONNECTIONS${RESET}"
+
+    # TCP VPN
+    if [ -f "$OVPN_TCP_LOG" ]; then
+        vpn_table
+        cat $OVPN_TCP_LOG | grep -w "^CLIENT_LIST" | cut -d ',' -f 2,3,8 | sed -e 's/,/      /g' | while read line; do
+            USER=$(echo "$line" | awk '{print $1}')
+            IP=$(echo "$line" | awk '{print $2}')
+            CONNECTED=$(echo "$line" | awk '{print $3}')
+            echo -e "${PINK[0]}${BOLD}│${RESET} ${CYAN[1]}%-19s${RESET} ${PINK[0]}${BOLD}│${RESET} ${CYAN[1]}%-16s${RESET} ${PINK[0]}${BOLD}│${RESET} ${CYAN[1]}%-28s${RESET} ${PINK[0]}${BOLD}│${RESET}" "$USER" "$IP" "$CONNECTED"
         done
+        echo -e "${PINK[0]}${BOLD}└─────────────────────┴──────────────────┴──────────────────────────────┘${RESET}"
     fi
 
-    if [ ${#online_ssh_users[@]} -eq 0 ]; then
-        echo -e "${YELLOW}│ Tidak ada pengguna SSH/OVPN yang sedang online.              │${NC}"
-    else
-        # Sortir berdasarkan username
-        sorted_ssh_users=($(
-            for user_key in "${!online_ssh_users[@]}"; do
-                echo "$user_key"
-            done | sort
-        ))
-
-        for user_online in "${sorted_ssh_users[@]}"; do
-            login_info="${online_ssh_users[$user_online]}"
-            printf "${CYAN}│ ${GREEN}%-13s${CYAN} | ${WHITE}%-13s${CYAN} | ${BLUE}%-13s ${CYAN}│${NC}\n" \
-                "$user_online" \
-                "Online" \
-                "$login_info"
+    # UDP VPN
+    if [ -f "$OVPN_UDP_LOG" ]; then
+        vpn_table
+        cat $OVPN_UDP_LOG | grep -w "^CLIENT_LIST" | cut -d ',' -f 2,3,8 | sed -e 's/,/      /g' | while read line; do
+            USER=$(echo "$line" | awk '{print $1}')
+            IP=$(echo "$line" | awk '{print $2}')
+            CONNECTED=$(echo "$line" | awk '{print $3}')
+            echo -e "${PINK[0]}${BOLD}│${RESET} ${CYAN[1]}%-19s${RESET} ${PINK[0]}${BOLD}│${RESET} ${CYAN[1]}%-16s${RESET} ${PINK[0]}${BOLD}│${RESET} ${CYAN[1]}%-28s${RESET} ${PINK[0]}${BOLD}│${RESET}" "$USER" "$IP" "$CONNECTED"
         done
+        echo -e "${PINK[0]}${BOLD}└─────────────────────┴──────────────────┴──────────────────────────────┘${RESET}"
     fi
-    echo -e "${CYAN}└──────────────────────────────────────────────────────────┘${NC}"
-    echo # Baris kosong untuk pemisah
+}
 
-    echo -e "${CYAN}Terakhir diperbarui: $(date +"%H:%M:%S")${NC}"
-    sleep "$REFRESH_INTERVAL"
-done
+# Main Execution
+show_header
+check_ssh
+check_vpn
+monitor_xray
+
+# Footer
+draw_rainbow_line
+echo -e "${DIM}${CYAN[1]}Monitoring started at $(date)$RESET"
+draw_rainbow_line
