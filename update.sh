@@ -40,8 +40,8 @@ res1() {
     rm -rf menu
     rm -rf menu.zip
     wget -O menu https://raw.githubusercontent.com/Ilham24022001/ganteng/refs/heads/main/menu/menu
-   sudo mv menu /usr/local/sbin/
-   sudo chmod +x /usr/local/sbin/menu
+    sudo mv menu /usr/local/sbin/
+    sudo chmod +x /usr/local/sbin/menu
 
 
 }
