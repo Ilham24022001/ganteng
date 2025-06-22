@@ -1,0 +1,292 @@
+
+#!/bin/bash
+
+# --- Pengaturan Warna ---
+NC='\033[0m'       # No Color
+RED='\033[0;31m'    # Merah
+GREEN='\033[0;32m'  # Hijau
+YELLOW='\033[0;33m' # Kuning
+BLUE='\033[0;34m'   # Biru
+CYAN='\033[0;36m'   # Cyan
+WHITE='\033[1;37m'  # Putih
+# --- Akhir Pengaturan Warna ---
+
+# --- Konfigurasi Umum ---
+REFRESH_INTERVAL=2 # Interval refresh dalam detik
+# --- Akhir Konfigurasi Umum ---
+
+# --- Konfigurasi Monitor IP Aktif ---
+MONITOR_PORTS=("80" "443") # Port yang dipantau (array untuk Nginx)
+# --- Akhir Konfigurasi Monitor IP Aktif ---
+
+# --- Konfigurasi API Xray (untuk data usage) ---
+XRAY_API_ADDRESS="127.0.0.1:10085"
+XRAY_CONFIG_FILE="/etc/xray/config.json"
+PROTO_FILE="stats.proto" # Pastikan file ini ada di direktori yang sama
+# --- Akhir Konfigurasi API Xray ---
+
+# --- Konfigurasi Log Xray (untuk pengguna online dari log) ---
+XRAY_ACCESS_LOG="/var/log/xray/access.log"
+LOG_LINES_TO_SCAN=10000 # Jumlah baris log Xray terakhir yang akan dipindai
+ACTIVE_THRESHOLD=60     # Detik. IP dianggap online jika ada aktivitas dalam X detik terakhir.
+# --- Akhir Konfigurasi Log Xray ---
+
+# Fungsi untuk membersihkan layar
+clear_screen() {
+    printf "\033[H\033[2J"
+}
+
+# Fungsi untuk mengonversi byte ke format yang lebih mudah dibaca (KB, MB, GB)
+format_bytes() {
+    local bytes=$1
+    local KB=$((1024))
+    local MB=$((1024 * KB))
+    local GB=$((1024 * MB))
+
+    if (( bytes >= GB )); then
+        printf "%.2f GB" $(echo "scale=2; $bytes / $GB" | bc)
+    elif (( bytes >= MB )); then
+        printf "%.2f MB" $(echo "scale=2; $bytes / $MB" | bc)
+    else # KB atau B
+        printf "%.2f KB" $(echo "scale=2; $bytes / $KB" | bc)
+    fi
+}
+
+# Fungsi untuk mengonversi string tanggal dari log Xray ke Unix timestamp
+tim2sec() {
+    local datetime_str=$(echo "$1" | cut -d'.' -f1 | sed 's/\//-/g')
+    date -d "$datetime_str" +%s 2>/dev/null
+}
+
+# --- Pemeriksaan Awal Tools ---
+check_tools() {
+    local missing_tools=()
+    command -v jq &> /dev/null || missing_tools+=("jq")
+    command -v grpcurl &> /dev/null || missing_tools+=("grpcurl")
+
+    if [ ${#missing_tools[@]} -gt 0 ]; then
+        echo -e "${RED}ERROR: Tools yang diperlukan tidak ditemukan: ${missing_tools[*]}.${NC}"
+        echo -e "${YELLOW}Pastikan mereka terinstal. Untuk 'jq' dan 'grpcurl' coba:${NC}"
+        echo -e "${WHITE}sudo apt update && sudo apt install jq -y${NC}"
+        echo -e "${WHITE}wget https://github.com/fullstorydev/grpcurl/releases/download/v1.9.1/grpcurl_1.9.1_linux_x86_64.tar.gz -O /tmp/grpcurl.tar.gz && tar -xzf /tmp/grpcurl.tar.gz -C /tmp/ && sudo mv /tmp/grpcurl /usr/local/bin/ && sudo chmod +x /usr/local/bin/grpcurl${NC}"
+        echo -e "${CYAN}└──────────────────────────────────────────────────────────┘${NC}"
+        exit 1
+    fi
+
+    if [[ ! -f "$PROTO_FILE" ]]; then
+        echo -e "${RED}ERROR: File proto (${PROTO_FILE}) tidak ditemukan di direktori saat ini.${NC}"
+        echo -e "${YELLOW}Silakan unduh: ${WHITE}wget https://raw.githubusercontent.com/XTLS/Xray-core/main/app/stats/command/command.proto -O stats.proto${NC}"
+        echo -e "${CYAN}└──────────────────────────────────────────────────────────┘${NC}"
+        exit 1
+    fi
+}
+
+# --- Main Loop Real-time ---
+check_tools # Jalankan pemeriksaan tools di awal
+
+echo -e "${CYAN}Memulai pemantauan lengkap Xray...${NC}"
+echo -e "${CYAN}Tekan ${RED}Ctrl+C${CYAN} untuk berhenti.${NC}"
+
+while true; do
+    clear_screen
+
+    # --- BAGIAN 1: TOTAL AKUN TERDAFTAR ---
+    echo -e "${CYAN}┌──────────────────────────────────────────────────────────┐${NC}"
+    echo -e "${CYAN}│${WHITE}                   TOTAL AKUN TERDAFTAR                   ${NC}${CYAN}│${NC}"
+    echo -e "${CYAN}├──────────────────────────────────────────────────────────┤${NC}"
+
+    vmess_count=$(grep -c -E "^#vmg " "$XRAY_CONFIG_FILE" 2>/dev/null || echo 0)
+    vless_count=$(grep -c -E "^#vlg " "$XRAY_CONFIG_FILE" 2>/dev/null || echo 0)
+    trtls_count=$(grep -c -E "^#trg " "$XRAY_CONFIG_FILE" 2>/dev/null || echo 0)
+    total_ssh_count=$(grep -c -E "^### " "/etc/xray/ssh" 2>/dev/null || echo 0)
+
+    printf "${CYAN}│ ${WHITE}%-20s ${CYAN}: %-28s ${CYAN}│${NC}\n" "VMESS (WS)" "$vmess_count Akun"
+    printf "${CYAN}│ ${WHITE}%-20s ${CYAN}: %-28s ${CYAN}│${NC}\n" "VLESS (WS)" "$vless_count Akun"
+    printf "${CYAN}│ ${WHITE}%-20s ${CYAN}: %-28s ${CYAN}│${NC}\n" "TROJAN (WS/GRPC)" "$trtls_count Akun"
+    printf "${CYAN}│ ${WHITE}%-20s ${CYAN}: %-28s ${CYAN}│${NC}\n" "SSH / OVPN" "$total_ssh_count Akun"
+    echo -e "${CYAN}└──────────────────────────────────────────────────────────┘${NC}"
+    echo # Baris kosong untuk pemisah
+
+    # --- BAGIAN 2: AKTIF IP YANG TERHUBUNG (REAL-TIME) ---
+    echo -e "${CYAN}┌──────────────────────────────────────────────────────────┐${NC}"
+    echo -e "${CYAN}│${WHITE}          AKTIF IP YANG TERHUBUNG KE PORT ${MONITOR_PORTS[@]}          ${NC}${CYAN}│${NC}"
+    echo -e "${CYAN}├──────────────────────────────────────────────────────────┤${NC}"
+    echo -e "${CYAN}│ ${WHITE}Port Tujuan ${CYAN}| ${WHITE}IP Klien Asal     ${CYAN}| ${WHITE}Port Asal      ${CYAN}│${NC}"
+    echo -e "${CYAN}├─────────────┼───────────────────┼────────────────┤${NC}"
+
+    ALL_CONNECTIONS=()
+    for port in "${MONITOR_PORTS[@]}"; do
+        if command -v ss &> /dev/null; then
+            ss_output=$(ss -nt | grep ":${port}" | grep "ESTAB" | awk -v port="$port" '{print port, $5}')
+        else
+            netstat_output=$(netstat -nt | grep ":${port}" | grep "ESTABLISHED" | awk -v port="$port" '{print port, $5}')
+        fi
+
+        if [[ -n "$ss_output" ]]; then
+            ALL_CONNECTIONS+=("$ss_output")
+        elif [[ -n "$netstat_output" ]]; then
+            ALL_CONNECTIONS+=("$netstat_output")
+        fi
+    done
+
+    declare -A displayed_ips
+
+    if [ ${#ALL_CONNECTIONS[@]} -eq 0 ]; then
+        echo -e "${YELLOW}│${NC} Belum ada IP aktif yang terhubung ke port ${MONITOR_PORTS[@]}.${YELLOW} │${NC}"
+    else
+        IFS=$'\n' sorted_connections=($(sort <<<"${ALL_CONNECTIONS[*]}"))
+        unset IFS
+
+        for entry in "${sorted_connections[@]}"; do
+            read -r target_port client_full_ip <<< "$entry"
+            client_ip=$(echo "$client_full_ip" | cut -d: -f1)
+            client_port=$(echo "$client_full_ip" | cut -d: -f2)
+
+            if [[ -z "${displayed_ips[${client_ip}:${target_port}]}" ]]; then
+                printf "${CYAN}│ ${YELLOW}%-11s${CYAN} | ${GREEN}%-17s${CYAN} | ${BLUE}%-14s${CYAN} │${NC}\n" \
+                    "$target_port" \
+                    "$client_ip" \
+                    "$client_port"
+                displayed_ips[${client_ip}:${target_port}]=1
+            fi
+        done
+    fi
+    echo -e "${CYAN}└──────────────────────────────────────────────────────────┘${NC}"
+    echo # Baris kosong untuk pemisah
+
+    # --- BAGIAN 3: PENGGUNA ONLINE DARI LOG XRAY (PERKIRAAN) ---
+    echo -e "${CYAN}┌──────────────────────────────────────────────────────────┐${NC}"
+    echo -e "${CYAN}│${WHITE}           PENGGUNA ONLINE (DARI LOG XRAY)              ${NC}${CYAN}│${NC}"
+    echo -e "${CYAN}├──────────────────────────────────────────────────────────┤${NC}"
+    echo -e "${CYAN}│ ${WHITE}IP Klien Asal     ${CYAN}| ${WHITE}User/Email       ${CYAN}| ${WHITE}Terakhir Aktif ${CYAN} │${NC}"
+    echo -e "${CYAN}├───────────────────┼─────────────────┼────────────────┤${NC}"
+
+    declare -A log_ip_to_user_map
+    declare -A log_ip_last_seen_timestamp
+    declare -A unique_online_ips # Untuk memastikan setiap IP hanya muncul sekali di list online
+
+    if [[ -f "$XRAY_ACCESS_LOG" ]]; then
+        current_timestamp=$(tim2sec "$(date +"%Y/%m/%d %H:%M:%S")")
+
+        tac "$XRAY_ACCESS_LOG" | head -n "$LOG_LINES_TO_SCAN" | while IFS= read -r log_line; do
+            # Regex yang cocok dengan log Anda: from <IP>:0 ... email: <user>
+            if [[ "$log_line" =~ ^([0-9]{4}/[0-9]{2}/[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]+)\ from\ ([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}):[0-9]+\ .+email:\ (.+) ]]; then
+                log_datetime="${BASH_REMATCH[1]}"
+                client_ip_from_log="${BASH_REMATCH[2]}"
+                user_email_from_log="${BASH_REMATCH[3]}"
+
+                log_ts=$(tim2sec "$log_datetime")
+
+                if [[ -n "$log_ts" && $((current_timestamp - log_ts)) -lt $ACTIVE_THRESHOLD ]]; then
+                    # Jika ini entri terbaru untuk IP ini, atau IP ini belum ada
+                    if [[ -z "${log_ip_last_seen_timestamp[$client_ip_from_log]}" || "$log_ts" -gt "${log_ip_last_seen_timestamp[$client_ip_from_log]}" ]]; then
+                        log_ip_to_user_map[$client_ip_from_log]="$user_email_from_log"
+                        log_ip_last_seen_timestamp[$client_ip_from_log]="$log_ts"
+                        unique_online_ips[$client_ip_from_log]=1 # Tandai IP ini sebagai online
+                    fi
+                fi
+            fi
+        done
+    fi
+
+    if [ ${#unique_online_ips[@]} -eq 0 ]; then
+        echo -e "${YELLOW}│${NC} Tidak ada pengguna yang dianggap online dari log Xray.${YELLOW}      │${NC}"
+    else
+        # Sortir berdasarkan IP
+        for ip in $(for key in "${!unique_online_ips[@]}"; do echo "$key"; done | sort -V); do # sort -V for version sort of IPs
+            user_from_log="${log_ip_to_user_map[$ip]}"
+            last_active_time=$((current_timestamp - ${log_ip_last_seen_timestamp[$ip]}))
+            printf "${CYAN}│ ${GREEN}%-17s${CYAN} | ${WHITE}%-15s${CYAN} | ${BLUE}%-13s ${CYAN}│${NC}\n" \
+                "$ip" \
+                "$user_from_log" \
+                "${last_active_time}s ago"
+        done
+    fi
+    echo -e "${CYAN}└──────────────────────────────────────────────────────────┘${NC}"
+    echo # Baris kosong untuk pemisah
+
+    # --- BAGIAN 4: PENGGUNAAN DATA PER PENGGUNA (DARI API) ---
+    echo -e "${CYAN}┌──────────────────────────────────────────────────────────┐${NC}"
+    echo -e "${CYAN}│${WHITE}           XRAY USER DATA USAGE (from API)              ${NC}${CYAN}│${NC}"
+    echo -e "${CYAN}├──────────────────────────────────────────────────────────┤${NC}"
+
+    declare -A id_to_display_name_map
+    FILTERED_JSON_CONTENT=$(cat "$XRAY_CONFIG_FILE" | grep -v '^[[:space:]]*#' | sed '/^[[:space:]]*$/d' 2>/dev/null)
+
+    if [ -z "$FILTERED_JSON_CONTENT" ]; then
+        echo -e "${RED}ERROR: Konten config.json kosong setelah filter. Tidak bisa memetakan pengguna.${NC}"
+    else
+        USER_MAPPING_DATA=$(echo "$FILTERED_JSON_CONTENT" | jq -r '
+        .inbounds[] |
+        select(.protocol == "vmess" or .protocol == "vless" or .protocol == "trojan" or .protocol == "shadowsocks") |
+        .settings.clients[] |
+        "\(.id) \(.email // .id)"
+        ' 2>/dev/null) # Suppress jq errors if JSON is still malformed
+
+        while read -r client_id client_email; do
+            id_to_display_name_map["$client_id"]="$client_email"
+        done <<< "$USER_MAPPING_DATA"
+    fi
+
+    STATS_JSON=$(grpcurl -plaintext -proto "$PROTO_FILE" -d '{}' "${XRAY_API_ADDRESS}" xray.app.stats.command.StatsService/QueryStats 2>/dev/null)
+
+    declare -A user_upload
+    declare -A user_download
+
+    if [ -z "$STATS_JSON" ]; then
+        echo -e "${YELLOW}│${NC} Gagal mengambil data statistik dari Xray API. Coba lagi.${YELLOW}    │${NC}"
+    else
+        echo "$STATS_JSON" | jq -r '.stat[] | select(.name | startswith("user>>>")) | [(.name | split(">>>")[1]), (.name | split(">>>")[3]), .value]' | \
+        while read -r -a stat_array; do
+            user_or_id_from_stat="${stat_array[0]}"
+            type="${stat_array[1]}"
+            stat_value="${stat_array[2]}"
+
+            display_name="${id_to_display_name_map[$user_or_id_from_stat]}"
+            if [[ -z "$display_name" ]]; then
+                display_name="$user_or_id_from_stat" # Fallback ke ID/nama yang diberikan API
+            fi
+
+            if [[ "$type" == "uplink" ]]; then
+                user_upload[$display_name]=$(( ${user_upload[$display_name]:-0} + stat_value ))
+            elif [[ "$type" == "downlink" ]]; then
+                user_download[$display_name]=$(( ${user_download[$display_name]:-0} + stat_value ))
+            fi
+        done
+    fi
+
+    echo -e "${CYAN}│ ${WHITE}Username        ${CYAN}| ${WHITE}Upload          ${CYAN}| ${WHITE}Download        ${CYAN} │${NC}"
+    echo -e "${CYAN}├─────────────────┼─────────────────┼─────────────────┤${NC}"
+
+    USERS_WITH_DATA=($(echo "${!user_upload[@]}" | tr ' ' '\n' | sort -u))
+
+    if [ ${#USERS_WITH_DATA[@]} -eq 0 ]; then
+        echo -e "${YELLOW}│${NC} Tidak ada data penggunaan yang ditemukan untuk pengguna Xray.${YELLOW}      │${NC}"
+    else
+        TOTAL_UPLOAD_ALL_USERS=0
+        TOTAL_DOWNLOAD_ALL_USERS=0
+
+        for user_display_name in "${USERS_WITH_DATA[@]}"; do
+            upload_bytes=${user_upload[$user_display_name]:-0}
+            download_bytes=${user_download[$user_display_name]:-0}
+
+            printf "${CYAN}│ %-15s ${CYAN}| %-15s ${CYAN}| %-15s ${CYAN}│${NC}\n" \
+                "${user_display_name}" \
+                "$(format_bytes $upload_bytes)" \
+                "$(format_bytes $download_bytes)"
+
+            TOTAL_UPLOAD_ALL_USERS=$((TOTAL_UPLOAD_ALL_USERS + upload_bytes))
+            TOTAL_DOWNLOAD_ALL_USERS=$((TOTAL_DOWNLOAD_ALL_USERS + download_bytes))
+        done
+        echo -e "${CYAN}├─────────────────┼─────────────────┼─────────────────┤${NC}"
+        # FIX: Variable typo here, was TOTAL_DOWNLOAD_ALL_ALL_USERS
+        printf "${CYAN}│ ${WHITE}Total           ${CYAN}| ${GREEN}%-15s ${CYAN}| ${GREEN}%-15s ${CYAN}│${NC}\n" \
+               "$(format_bytes $TOTAL_UPLOAD_ALL_USERS)" \
+               "$(format_bytes $TOTAL_DOWNLOAD_ALL_USERS)"
+    fi
+    echo -e "${CYAN}└──────────────────────────────────────────────────────────┘${NC}"
+
+    echo # Baris kosong untuk pemisah
+    echo -e "${CYAN}Terakhir diperbarui: $(date +"%H:%M:%S")${NC}"
+    sleep "$REFRESH_INTERVAL"
+done
