@@ -83,6 +83,7 @@ MYIP=$(curl -sS ipv4.icanhazip.com)
 clear
 apt install ruby -y
 gem install lolcat
+apt install jq -y
 apt install wondershaper -y
 clear
 # REPO    
