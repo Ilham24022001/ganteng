@@ -315,9 +315,11 @@ TIMES="10"
 CHATID="1469244768"
 KEY="7911375235:AAERwknqnWLoqWFbsSuUfqCQGMy93UQHUTk"
 URL="https://api.telegram.org/bot$KEY/sendMessage"
+username=$(curl $izinsc | grep $MYIP | awk '{print $2}')
 ISP=$(cat /root/.isp)
 IP=$(curl -sS ipv4.icanhazip.com)
 CITY=$(cat /root/.city)
+DOMAIN=$(/etc/xray/domain)
 TIMEZONE=$(printf '%(%H:%M:%S)T')
     TEXT="
 <code>────────────────────</code>
@@ -329,7 +331,8 @@ TIMEZONE=$(printf '%(%H:%M:%S)T')
 <code>IP       :</code><code>$IP</code>
 <code>DATE     :</code><code>$DATE</code>
 <code>Time     :</code><code>$TIMEZONE</code>
-<code>Exp Sc.  :</code><code>$exp</code>
+<code>Domain   :</code><code>$DOMAIN</code>
+<code>Exp Sc.  :</code><code>$Exp1</code>
 <code>─────────────────────────────</code>
 <b> HOKAGE CENTER VPN STORE SCRIPT  </b>
 <code>─────────────────────────────</code>
