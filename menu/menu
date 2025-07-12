@@ -160,9 +160,9 @@ r="\033[1;31m"  #REDTERANG
 a=" ${CYAN}ACCOUNT PREMIUM" 
 #clear
 echo -e " "
-echo -e " ${z}╭══════════════════════════════════════════════════════════╮${NC}"
+echo -e " ${z}╭═════════════════════════════════════════════════════════╮${NC}"
 echo -e " ${z}│$NC${f}    WELCOME TO  AM GANTENG STORE AUTOSCRIPT PREMIUM      $NC${z}│$NC"
-echo -e " ${z}╰══════════════════════════════════════════════════════════╯${NC}"
+echo -e " ${z}╰═════════════════════════════════════════════════════════╯${NC}"
 echo -e " ${z}══════════════════════════════════════════════════════════${NC}"
 echo -e " ${GREEN}● ${LIGHTGREEN}● ${CYAN}● ${LIGHTBLUE}● ${BLUE}● ${PURPLE}● ALL OS SUPPORT UBUNTU ${PINK}● ${WHITE}● ${NC}${RED}● ${ORANGE}●"
 echo -e " ${z}$NC$r ⇲ $NC$y ISP ${NC}           $Blue=$NC $ISP${NC}"
