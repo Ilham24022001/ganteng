@@ -189,7 +189,7 @@ echo -e " ${z}│ ${NC}$y WS-ePRO$NC : $status_ws_epro" "   $y DROPBEAR$NC : $st
 echo -e " ${z}╰════════════════╯╰══════════════════╯╰════════════════════╯${NC}"
 echo -e "            ${KIRI} ${Green}⇱ ALL FITUR SC TUNNELING ⇲${NC} ${KANAN}"
 echo -e "    ${z}══════════════════════════════════════════════════════${NC}"
-echo -e "           ${z}$NC [${wh}01${NC}]$white MENU SSH$NC     ${z}│$NC [${w}05${NC}]$white MENU SSWS$NC  ${z}$NC"
+echo -e "$COLOR1│ ${WH}[${COLOR1}01${WH}]${NC} ${COLOR1}• ${WH}SSH VPN  ${WH}[${COLOR1}Menu${WH}]   ${z}│$NC [${w}05${NC}]$white MENU SSWS$NC  ${z}$NC"
 echo -e "           ${z}$NC [${wh}02${NC}]$white MENU VMESS$NC   ${z}│$NC [${w}06${NC}]$white MENU NOOBZVPN$NC ${z}$NC"
 echo -e "           ${z}$NC [${wh}03${NC}]$white MENU VLESS$NC   ${z}│$NC [${w}07${NC}]$white SPEEDTEST$NC ${z} $NC"
 echo -e "           ${z}$NC [${wh}04${NC}]$white MENU TROJAN$NC  ${z}│$NC [${w}08${NC}]$white MENU UTILITY$NC ${z} $NC"
