@@ -119,93 +119,176 @@ a=" ${CYAN}ACCOUNT PREMIUM"
 #clear
 clear
 
-function Newbie_Banner() {
+echo -e " "
+echo -e "   ${Blue}╭════════════════════════════════════════════╮${NC}"
+echo -e "   ${Blue}│$NC${f}  Welcome To AM GANTENG AUTOSCRIPT PREMIUM           $NC${Blue}│$NC"
+echo -e "   ${Blue}╰════════════════════════════════════════════╯${NC}"
+echo -e " ${YELL}╭══════════════════════════════════════════════════╮${NC}"
+echo -e "   ${z}$NC [${f}01${NC}]$grenbo MENU TRIAL$NC       ${z}   $NC [${f}08${NC}]$purple BACKUP/ RESTORE "    
+echo -e "   ${z}$NC [${f}02${NC}]$grenbo MENU DELL USER EXP$NC ${z}$NC  [${f}09${NC}]$purple RENNEW DOMAIN$NC" 
+echo -e "   ${z}$NC [${f}03${NC}]$grenbo MENU AUTO REBOOT$NC  ${z} $NC  [${f}10${NC}]$purple RUNNING$NC" 
+echo -e "   ${z}$NC [${f}04${NC}]$grenbo MENU RESTART SERVICE$NC${z}$NC [${f}11${NC}]$purple IP ONLINE$NC"
+echo -e "   ${z}$NC [${f}05${NC}]$grenbo MENU BOT TELEGRAM$NC ${z} $NC  [${f}12${NC}]$purple UPDATE SCRIPT$NC"
+echo -e "   ${z}$NC [${f}06${NC}]$grenbo CHANGE BANNER$NC    ${z} $NC   [${f}13${NC}]$purple FIX CERT SSL$NC"
+echo -e "   ${z}$NC [${f}07${NC}]$grenbo INFO PORT$NC         ${z} $NC  [${f}14${NC}]$purple INSTALL UDP$NC"
+echo -e " ${YELL}╰══════════════════════════════════════════════════╯${NC}"
+echo -e "   ${y} ════════════════════════════════════════════"
+echo -e "   ${r} PILIH MENU DENGAN CARA KETIK 1/14 LALU ENTER $NC"
+echo -e "   ${y} ════════════════════════════════════════════"
+echo -e "   ${Blue}╭═══════════════════════════════════════${NC}"
+echo -e "   ${Blue}│$NC${f} Developer$NC  ${z}=$NC AM GANTENG"
+echo -e "   ${Blue}│$NC${f} Facebook$NC   ${z}=$NC PANDA II"
+echo -e "   ${Blue}│$NC${f} IP ADDRESS$NC ${z}=$NC $IPVPS${NC}"
+echo -e "   ${Blue}│$NC${f} User$NC       ${z}=$NC $username"
+echo -e "   ${Blue}│$NC${f} Exp Script$NC ${z}=$NC $exp $certifacate Days$NC $sts"
+echo -e "   ${Blue}╰═══════════════════════════════════════${NC}"
+echo -e "     ${f}THANKS YOU FOR USING AM GANTENG STORE $NC"
+echo -e ""
+read -p " PILIH OPSI MENU [ 1-14 atau x] ➤ : " opt
+echo -e ""
+case $opt in
+1 | 01)
 clear
-BOX_WIDTH=47
-TEXT="$(cat /etc/xray/username)"
-TEXT_LENGTH=${#TEXT}
-TEXT_COLOR="\033[97;1m\033[41m"
-RESET_COLOR="\033[0m"
-LEFT_PADDING=$(( (BOX_WIDTH - TEXT_LENGTH) / 2 ))
-RIGHT_PADDING=$(( BOX_WIDTH - TEXT_LENGTH - LEFT_PADDING ))
-LEFT_SPACE=$(printf '\033[41m%*s\033[0m' $LEFT_PADDING '')
-RIGHT_SPACE=$(printf '\033[41m%*s\033[0m' $RIGHT_PADDING '')
-echo -e "\033[96;1m═══════════════════════════════════════════════════\033[0m "
-echo -e "\033[97;1m  \033[0m${LEFT_SPACE}${TEXT_COLOR}${TEXT}${RESET_COLOR}${RIGHT_SPACE} \033[97;1m \033[0m"
-echo -e "\033[96;1m═══════════════════════════════════════════════════\033[0m "
-}
-
-
-
-function Service_System_Operating() {
-echo -e "\033[96;1m═══════════════════════════════════════════════════\033[0m "
-echo -e "\033[96;1m \e[97m SYSTEM          : $(cat /etc/os-release | grep -w ID | head -n1 | sed 's/=//g' | sed 's/"//g' | sed 's/ID//g')     \033[0m "
-echo -e "\033[96;1m \e[97m RAM             : $(free -m | awk 'NR==2 {print $2}')    \033[0m "
-echo -e "\033[96;1m \e[97m UPTIME          : $(uptime -p | cut -d " " -f 2-10)\033[0m "
-echo -e "\033[96;1m \e[97m IP VPS          : $(curl -s ipv4.icanhazip.com)     \033[0m "
-echo -e "\033[96;1m \e[97m CITY            : $(cat /etc/xray/city)    \033[0m "
-echo -e "\033[96;1m \e[97m ISP             : $(cat /etc/xray/isp)    \033[0m "
-echo -e "\033[96;1m \e[97m DOMAIN          : $(cat /etc/xray/domain)    \033[0m "
-echo -e "\033[96;1m───────────────────────────────────────────────────\033[0m"
-echo -e "\033[97;1m             \033[0m \033[93;1m\033[0m \033[92;1m[ SERVICE STATUS ]\033[0m \033[97;1m \033[0m " 
-}
-
-
-
-function Service_Status() {
-echo -e "\033[96;1m───────────────────────────────────────────────────\033[0m "
-echo -e "\033[96;1m \e[0m\e[33m PROXY :\e[0m $status_haproxy  \e[0m|\e[33m NGINX :\e[0m $status_nginx  \e[0m|\e[33m XRAY :\e[0m $status_xray \e[0m| $status_dropbear  \e[96;1m   \e[0m "
-}
-
-
-
-function Acces_Use_Command() {
-echo -e "\033[96;1m═══════════════════════════════════════════════════\033[0m "
-echo -e "\033[96;1m  \e[34m1.)\e[93m \e[97m SSH/OPENVPN         \e[34m7.)\e[93m \e[97m BOT TELEGRAM   \e[96;1m\e[0m"   
-echo -e "\033[96;1m  \e[34m2.)\e[93m \e[97m XRAY MANAGER        \e[34m8.)\e[93m \e[97m UPDATE SCRIPT  \e[96;1m\e[0m"
-echo -e "\033[96;1m  \e[34m3.)\e[93m \e[97m XRAY TROJAN         \e[34m9.)\e[93m \e[97m BACKUP RESTOR  \e[96;1m\e[0m"
-echo -e "\033[96;1m  \e[34m4.)\e[93m \e[97m SLOWDNS            \e[34m10.)\e[93m \e[97m FEATURES       \e[96;1m\e[0m"
-echo -e "\033[96;1m  \e[34m5.)\e[93m \e[97m NOOBZVPNS          \e[34m11.)\e[93m \e[97m REBOOT         \e[96;1m\e[0m"
-echo -e "\033[96;1m  \e[34m6.)\e[93m \e[97m RENAME SC          \e[34m12.)\e[93m \e[97m MENU        \e[96;1m\e[0m"
-echo -e "\033[96;1m═══════════════════════════════════════════════════\033[0m "
-echo -e "\033[96;1m                \e[31m\e[93m  \e[91m   [ EXIT ]          \e[96;1m\e[0m"
-echo -e "\033[96;1m═══════════════════════════════════════════════════\033[0m "
-echo -e "\033[96;1m┌──────────────────────────────────────────────────┐\033[0m"
-echo -e "\033[96;1m   \e[0m\e[33m      kesuksesan itu dari diri sendiri \033[0m"
-echo -e "\033[96;1m└──────────────────────────────────────────────────┘\033[0m"
-}
-
-
-
-function Select_Display() {
-echo
-read -p "Select From option [1/11 or x] :  " hallo
-case $hallo in
-1) clear ; m-ssh ;; # menu ssh
-2) clear ; m-xray ;; # menu vmess
-3) clear ; m-tro ;; # menu vles
-4) clear ; sd ;; # menu trojan
-5) clear ; m-noobz ;; # menu sadowsocks
-6) clear ; Rename ;; # menu noobzvps
-7) clear ; m-bot ;; # menu bot telegram
-8) clear ; wget -q https://raw.githubusercontent.com/Ilham24022001/Gantengzz/main/update.sh && bash update.sh ;; #Update script
-9) clear ; m-bkp ;; # menu backup
-10) clear ; m-ftr ;; # menu managers
-11)clear ; reboot ;; # menu managers
-*) welcome ;; # Back To Home Welcome
+m-trial
+;;
+2 | 02)
+clear
+xp
+echo ""
+echo -e " ${GREEN} Back to menu in 1 sec ${NC}"
+sleep 1
+menu-x
+;;
+3 | 03)
+clear
+autoreboot
+;;
+4 | 04)
+clear
+restart
+reboot
+;;
+5 | 05)
+clear
+m-bot
+;;
+6 | 06)
+clear
+echo -e "Edit Banner SSH Message " | lolcat
+sleep 2
+echo -e "Loading..........⏳" | lolcat
+sleep 5
+nano /etc/kyt.txt
+clear
+echo -e "${green}ANDA YAKIN UNTUK MEMASANG BANNER INI ? $NC"
+echo -e ""
+read -p "SILAHKAN PILIH OPSI BERIKUT [Y/N]:" arg
+if [[ $arg == 'Y' ]]; then
+  echo -e "${Blue}Tindakan Diteruskan! $NC"
+  echo -e "${green}START. . . $NC"
+elif [[ $arg == 'y' ]]; then
+  echo -e "${Blue}Tindakan Diteruskan! $NC"
+  clear
+  echo -e "${Blue}START . . .$NC"
+elif [[ $arg == 'N' ]]; then
+  echo -e "${RED}Tindakan Dihentikan! $NC"
+  sleep 1
+  clear
+  menu
+  exit 0
+elif [[ $arg == 'n' ]]; then
+  echo -e "${RED}Tindakan Dihentikan! $NC"
+  sleep 1
+  clear
+  rm -f /root/update.sh
+  exit 0
+else
+  echo -e "${RED}Argumen Tidak Diketahui! $NC"
+  sleep 1
+  clear
+  rm -f /root/update.sh
+  exit 0
+fi
+##########
+clear
+reboot
+;;
+7 | 07)
+clear
+prot
+;;
+8 | 08)
+clear
+menu-backup
+;;
+9 | 09)
+clear
+addhost
+;;
+10)
+clear
+run
+;;
+11)
+clear
+user-online
+;;
+12)
+clear
+wget -q https://raw.githubusercontent.com/hokagelegend9999/alpha.v2/refs/heads/main/update.sh
+chmod +x update.sh
+./update.sh
+;;
+13)
+clear
+fixcert
+;;
+14)
+clear
+echo -e "${green}ANDA YAKIN UNTUK MEMASANG SCRIPT INI ? $NC"
+echo -e "${green}MINIMAL RAM 2 GB BIAR DISK TIDAK FULL $NC"
+echo -e "${green}OS SUPPORT UBUNTU 20.04 ONLY $NC"
+echo -e ""
+read -p "SUDAH LAPOR KE ADMIN ? [Y/N]:" arg
+if [[ $arg == 'Y' ]]; then
+  echo -e "${Blue}Tindakan Diteruskan! $NC"
+  echo -e "${green}START. . . $NC"
+elif [[ $arg == 'y' ]]; then
+  echo -e "${Blue}Tindakan Diteruskan! $NC"
+  clear
+  echo -e "${Blue}START . . .$NC"
+elif [[ $arg == 'N' ]]; then
+  echo -e "${RED}Tindakan Dihentikan! $NC"
+  sleep 1
+  clear
+  menu
+  exit 0
+elif [[ $arg == 'n' ]]; then
+  echo -e "${RED}Tindakan Dihentikan! $NC"
+  sleep 1
+  clear
+  rm -f /root/update.sh
+  exit 0
+else
+  echo -e "${RED}Argumen Tidak Diketahui! $NC"
+  sleep 1
+  clear
+  rm -f /root/update.sh
+  exit 0
+fi
+##########
+clear
+wget --load-cookies /tmp/cookies.txt ${UDPX} -O install-udp && rm -rf /tmp/cookies.txt && chmod +x install-udp && ./install-udp
+;;
+0 | 00)
+exit
+;;
+x)
+menu-x
+;;
+*) clear ;
+echo -e
+menu-x
+;;
 esac
-}
-
-
-Newbie_Banner
-Service_System_Operating
-Service_Status
-Acces_Use_Command
-Select_Display
-
-
-
-
-
-
-
+clear
